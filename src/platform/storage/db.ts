@@ -70,3 +70,17 @@ export async function storageUsage(): Promise<string> {
   const e = await navigator.storage.estimate();
   return `${((e.usage ?? 0) / 1048576).toFixed(1)} МБ`;
 }
+
+/** Записать много значений одной транзакцией. */
+export async function dbPutMany(store: StoreName, entries: ReadonlyArray<readonly [IDBValidKey, unknown]>) {
+  const db = await openDb();
+  const tx = db.transaction(store, 'readwrite');
+  const s = tx.objectStore(store);
+  for (const [k, v] of entries) s.put(v, k);
+  return done(tx);
+}
+
+export async function dbCount(store: StoreName): Promise<number> {
+  const db = await openDb();
+  return req(db.transaction(store).objectStore(store).count());
+}

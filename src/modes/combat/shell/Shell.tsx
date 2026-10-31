@@ -1,7 +1,7 @@
 import type { ModeShellProps } from '@kit/mode/manifest';
-import { ModePlaceholder } from '@kit/ui/ModePlaceholder';
+import { MapWorkspace } from '@kit/map/MapWorkspace';
 
-/** Оболочка режима «Боевой контур». */
+/** Оболочка режима «Боевой контур»: пока — рабочее поле карты (M2a). */
 export default function Shell({ onExit }: ModeShellProps) {
-  return <ModePlaceholder title="Боевой контур" milestone="M3" onExit={onExit} />;
+  return <MapWorkspace title="Боевой контур" onExit={onExit} />;
 }

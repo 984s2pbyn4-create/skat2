@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config';
 import type { Plugin } from 'vite';
 import preact from '@preact/preset-vite';
 import { fileURLToPath } from 'node:url';
+import { readdirSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 import pkg from './package.json' with { type: 'json' };
 import { swSource } from './src/platform/sw/template.ts';
 
@@ -13,13 +15,11 @@ function serviceWorker(version: string): Plugin {
     name: 'skat2-sw',
     apply: 'build',
     generateBundle(_options, bundle) {
-      const files = new Set([
-        './',
-        './index.html',
-        './manifest.webmanifest',
-        './icon-192.png',
-        './icon-512.png',
-      ]);
+      const files = new Set(['./', './index.html']);
+      for (const f of readdirSync(dir('./public'), { recursive: true, withFileTypes: true })) {
+        if (f.isFile())
+          files.add(`./${relative(dir('./public'), join(f.parentPath, f.name)).split(sep).join('/')}`);
+      }
       for (const f of Object.keys(bundle)) if (!f.endsWith('.map') && f !== 'sw.js') files.add(`./${f}`);
       const list = [...files].sort();
       let h = 0;
@@ -44,7 +44,7 @@ export default defineConfig({
       '@app': dir('./src/app'),
     },
   },
-  build: { target: 'es2022', sourcemap: true },
+  build: { target: 'es2022', sourcemap: true, chunkSizeWarningLimit: 1200 },
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',

@@ -123,3 +123,76 @@
   border-radius: var(--radius);
   color: var(--warn);
 }
+.k-sheet-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+.k-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 62vh;
+  overflow: auto;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 24px rgb(0 0 0 / 0.4);
+}
+@media (min-width: 1024px) and (pointer: fine) {
+  .k-sheet {
+    left: auto;
+    top: 0;
+    width: 380px;
+    max-height: none;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+    border-radius: 0;
+  }
+}
+.k-sheet-h {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 6px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.k-sheet-h h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.k-sheet-b {
+  padding: 8px 16px 16px;
+}
+.k-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.k-opt input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+.k-field {
+  width: 72px;
+  min-height: var(--tap);
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}

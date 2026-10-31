@@ -1,0 +1,186 @@
+import { useEffect, useRef, useState } from 'preact/hooks';
+import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import './map.css';
+import { gridStepForZoom, skGrid } from '@core/geo/grid';
+import type { MapView } from '@core/model/mapView';
+import { Button } from '@kit/ui/Button';
+import { detectDevice } from '@platform/device/detect';
+import { basemapById } from './basemaps';
+import { CoordBar } from './CoordBar';
+import { DownloadSheet } from './DownloadSheet';
+import { EMPTY_FC, buildStyle, registerSkatProtocol, setBasemap, tiles } from './engine';
+import { watchHeading } from './heading';
+import { LayersSheet } from './LayersSheet';
+import { loadMapView, saveMapView } from './persist';
+
+interface Props {
+  readonly title: string;
+  readonly onExit: () => void;
+}
+
+const touch = detectDevice() !== 'desktop';
+
+function updateGrid(map: maplibregl.Map, on: boolean): void {
+  const src = map.getSource('grid') as GeoJSONSource | undefined;
+  if (!src) return;
+  if (!on || map.getZoom() < 6) {
+    src.setData(EMPTY_FC);
+    return;
+  }
+  const b = map.getBounds();
+  const r = skGrid(
+    { w: b.getWest(), s: b.getSouth(), e: b.getEast(), n: b.getNorth() },
+    gridStepForZoom(map.getZoom()),
+  );
+  src.setData({ type: 'FeatureCollection', features: r.features });
+}
+
+/** Рабочее поле с картой: подложки, сетка СК-42, координаты, компас, офлайн-участки. */
+export function MapWorkspace({ title, onExit }: Props) {
+  const box = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<MapView | null>(null);
+  const [view, setView] = useState<MapView | null>(null);
+  const [map, setMap] = useState<maplibregl.Map | null>(null);
+  const [sheet, setSheet] = useState<'layers' | 'download' | null>(null);
+  const [heading, setHeading] = useState<(() => void) | null>(null);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    void loadMapView().then((v) => {
+      if (!alive) return;
+      viewRef.current = v;
+      setView(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const update = (patch: Partial<MapView>) => {
+    const cur = viewRef.current;
+    if (!cur) return;
+    const next = { ...cur, ...patch };
+    viewRef.current = next;
+    setView(next);
+    void saveMapView(next);
+  };
+
+  useEffect(() => {
+    const v = viewRef.current;
+    if (!v || !box.current) return;
+    registerSkatProtocol();
+    tiles.offline = v.offline;
+    tiles.onBlocked = (b) =>
+      setMessage(`${b.name}: браузер не даёт загружать тайлы. Выберите другую подложку.`);
+    const m = new maplibregl.Map({
+      container: box.current,
+      style: buildStyle(basemapById(v.basemap)),
+      center: v.center,
+      zoom: v.zoom,
+      bearing: v.bearing,
+      maxPitch: 60,
+      attributionControl: { compact: true },
+    });
+    m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+    m.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
+    let t: ReturnType<typeof setTimeout> | undefined;
+    m.on('moveend', () => {
+      updateGrid(m, viewRef.current?.grid ?? false);
+      clearTimeout(t);
+      t = setTimeout(() => {
+        const c = m.getCenter();
+        update({ center: [c.lng, c.lat], zoom: m.getZoom(), bearing: m.getBearing() });
+      }, 500);
+    });
+    m.on('load', () => {
+      updateGrid(m, v.grid);
+      setMap(m);
+    });
+    return () => {
+      clearTimeout(t);
+      m.remove();
+      void tiles.flush();
+    };
+  }, [view === null]);
+
+  useEffect(() => () => heading?.(), [heading]);
+
+  if (!view) return <p class="k-center k-muted">Загрузка карты…</p>;
+  const base = basemapById(view.basemap);
+
+  const change = (patch: Partial<MapView>) => {
+    update(patch);
+    if (!map) return;
+    if (patch.offline !== undefined) {
+      tiles.offline = patch.offline;
+      tiles.resetBlocked();
+      setMessage('');
+    }
+    if (patch.basemap !== undefined || patch.offline !== undefined) {
+      setMessage('');
+      setBasemap(map, basemapById(patch.basemap ?? view.basemap));
+    }
+    if (patch.grid !== undefined) updateGrid(map, patch.grid);
+  };
+
+  const toggleHeading = async () => {
+    if (heading) {
+      heading();
+      setHeading(null);
+      map?.easeTo({ bearing: 0 });
+      return;
+    }
+    try {
+      let last = 0;
+      const stop = await watchHeading((deg) => {
+        const now = performance.now();
+        if (!map || now - last < 80) return;
+        last = now;
+        if (Math.abs(((deg - map.getBearing() + 540) % 360) - 180) > 1) map.jumpTo({ bearing: deg });
+      });
+      setHeading(() => stop);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <div class="m-wrap">
+      <div ref={box} class="m-map" />
+      <div class="m-cross" aria-hidden="true" />
+      <header class="m-top">
+        <Button variant="ghost" onClick={onExit}>
+          ‹ Режимы
+        </Button>
+        <h1>{title}</h1>
+        <span class="m-spacer" />
+        {touch && (
+          <Button variant={heading ? 'primary' : 'default'} onClick={() => void toggleHeading()}>
+            Компас
+          </Button>
+        )}
+        <Button onClick={() => setSheet('layers')}>Слои</Button>
+      </header>
+      {view.offline && <div class="m-badge">Без сети</div>}
+      {message && (
+        <button type="button" class="m-msg" onClick={() => setMessage('')}>
+          {message}
+        </button>
+      )}
+      {map && <CoordBar map={map} format={view.coords} onFormat={(coords) => update({ coords })} />}
+      {sheet === 'layers' && (
+        <LayersSheet
+          view={view}
+          onChange={change}
+          onDownload={() => setSheet('download')}
+          onClose={() => setSheet(null)}
+        />
+      )}
+      {sheet === 'download' && map && (
+        <DownloadSheet map={map} basemap={base} offline={view.offline} onClose={() => setSheet(null)} />
+      )}
+    </div>
+  );
+}
