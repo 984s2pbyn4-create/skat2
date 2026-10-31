@@ -16,6 +16,10 @@ export default defineConfig(
       'no-restricted-globals': ['error', 'event', 'name', 'status', 'length'],
     },
   },
-  { files: ['**/*.cjs'], languageOptions: { globals: globals.node, sourceType: 'commonjs' } },
-  { files: ['*.js'], languageOptions: { globals: globals.node } },
+  {
+    files: ['**/*.cjs'],
+    languageOptions: { globals: globals.node, sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+  { files: ['*.js', 'platforms/**/*.mjs'], languageOptions: { globals: globals.node } },
 );

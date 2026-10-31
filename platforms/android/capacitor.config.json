@@ -1,0 +1,7 @@
+{
+  "appId": "ru.skat.skat2",
+  "appName": "СКАТ 2.0",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": true }
+}
