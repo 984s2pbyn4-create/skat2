@@ -4,7 +4,7 @@ import type { CustomMap } from '@core/model/mapView';
 const YA = 'https://core-renderer-tiles.maps.yandex.net/tiles?l=';
 const G = 'https://mt{s}.google.com/vt/lyrs=';
 
-/** Подложки (CORE-02): список СКАТ 6.x и Bing. Форматы: XYZ, TMS, квадключ Bing, Яндекс 3395. */
+/** Подложки (CORE-02): список СКАТ 6.x (без 2ГИС и CartoDB — не отдают карту без ключа) и Bing. Форматы: XYZ, TMS, квадключ Bing, Яндекс 3395. */
 export const BASEMAPS: readonly Basemap[] = [
   {
     id: 'osm',
@@ -95,30 +95,6 @@ export const BASEMAPS: readonly Basemap[] = [
     ellipsoidal: true,
     dark: true,
     attribution: '© Яндекс',
-  },
-  {
-    id: '2gis',
-    name: '2ГИС',
-    url: 'https://tile2.maps.2gis.com/tiles?x={x}&y={y}&z={z}',
-    maxZoom: 18,
-    attribution: '© 2ГИС',
-  },
-  {
-    id: 'carto_l',
-    name: 'CartoDB светлая',
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-    subdomains: 'abcd',
-    maxZoom: 19,
-    attribution: '© OpenStreetMap, © CARTO',
-  },
-  {
-    id: 'carto_d',
-    name: 'CartoDB тёмная',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-    subdomains: 'abcd',
-    maxZoom: 19,
-    dark: true,
-    attribution: '© OpenStreetMap, © CARTO',
   },
 ];
 

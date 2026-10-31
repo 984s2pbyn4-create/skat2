@@ -190,7 +190,7 @@ export function MapWorkspace({ title, onExit }: Props) {
           </Button>
         )}
         <Button variant={progress !== null ? 'primary' : 'default'} onClick={() => setSheet('downloads')}>
-          {progress !== null ? `Загрузки ${progress} %` : 'Загрузки'}
+          {progress === null ? 'Загрузки' : progress === 'busy' ? 'Загрузки…' : `Загрузки ${progress} %`}
         </Button>
         <Button onClick={() => setSheet('layers')}>Слои</Button>
       </header>

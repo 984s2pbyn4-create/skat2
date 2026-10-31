@@ -1,7 +1,6 @@
 import { signal } from '@preact/signals';
-import { eachTile, type Bounds } from '@core/geo/tiles';
+import { eachTile, tileRange, type Bounds, type TileRange } from '@core/geo/tiles';
 import {
-  coversTile,
   overpassQuery,
   parseDownloads,
   parsePlaces,
@@ -22,6 +21,10 @@ import { tiles } from './engine';
 export const areas = signal<DownloadArea[]>([]);
 /** Номер версии названий — карта перерисовывает подписи, когда он меняется. */
 export const placesVersion = signal(0);
+/** Когда начался запрос названий (для счётчика секунд), 0 — не идёт. */
+export const placesSince = signal(0);
+/** Удаляемые участки: id → процент. */
+export const removing = signal<Record<string, number>>({});
 
 const BATCH = 12;
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
@@ -120,26 +123,40 @@ async function runTiles(a: DownloadArea, idx: number, l: DownloadLayer, job: { s
   patch(a.id, idx, { cursor, ok, bytes, ...(job.stop ? { state: 'paused' as const } : {}) }, true);
 }
 
+const PLACES_TIMEOUT = 60_000;
+
 async function runPlaces(a: DownloadArea): Promise<void> {
   let lastErr: unknown = null;
-  for (const url of OVERPASS) {
-    try {
-      const r = await fetch(url, {
-        method: 'POST',
-        body: new URLSearchParams({ data: overpassQuery(a.bounds) }),
-      });
-      if (!r.ok) throw new Error(`сервер названий ответил ${r.status}`);
-      const places = parsePlaces(await r.json());
-      await dbPut('assets', `places/${a.id}`, places);
-      const idx = a.layers.findIndex((l) => l.kind === 'places');
-      patch(a.id, idx, { ok: places.length, bytes: JSON.stringify(places).length, total: 1 });
-      placesVersion.value++;
-      return;
-    } catch (e) {
-      lastErr = e;
+  placesSince.value = Date.now();
+  try {
+    for (const url of OVERPASS) {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), PLACES_TIMEOUT);
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          body: new URLSearchParams({ data: overpassQuery(a.bounds) }),
+          signal: ac.signal,
+        });
+        if (!r.ok) throw new Error(`сервер названий ответил ${r.status}`);
+        const places = parsePlaces(await r.json());
+        await dbPut('assets', `places/${a.id}`, places);
+        const idx = a.layers.findIndex((l) => l.kind === 'places');
+        patch(a.id, idx, { ok: places.length, bytes: JSON.stringify(places).length, total: 1 });
+        placesVersion.value++;
+        return;
+      } catch (e) {
+        lastErr = ac.signal.aborted
+          ? new Error('Сервер названий не ответил за 60 с — уменьшите участок или повторите')
+          : e;
+      } finally {
+        clearTimeout(timer);
+      }
     }
+    throw lastErr instanceof Error ? lastErr : new Error('Сервер названий недоступен');
+  } finally {
+    placesSince.value = 0;
   }
-  throw lastErr instanceof Error ? lastErr : new Error('Сервер названий недоступен');
 }
 
 export function addArea(name: string, bounds: Bounds, layers: DownloadLayer[]): void {
@@ -165,31 +182,60 @@ export function resume(areaId: string, idx: number): void {
   kick();
 }
 
-/** Удалить участок: его тайлы (кроме нужных другим участкам), высоты и названия. */
+/** Удалить участок: его тайлы (кроме нужных другим участкам), высоты и названия. Ход — в removing. */
 export async function removeArea(areaId: string): Promise<void> {
-  if (current?.area === areaId) {
-    current.stop = true;
-    while (current?.area === areaId) await new Promise((r) => setTimeout(r, 100));
-  }
-  const area = areas.value.find((a) => a.id === areaId);
-  if (!area) return;
-  const others = areas.value.filter((a) => a.id !== areaId);
-  const keys: string[] = [];
-  for (const l of area.layers) {
-    if (l.kind === 'places') continue;
-    const src = sourceOf(l).id;
-    for (const [zz, x, y] of eachTile(area.bounds, l.z0, l.z1, l.ellipsoidal)) {
-      const shared = others.some((o) =>
-        o.layers.some((ol) => coversTile(o.bounds, { ...ol, source: sourceOf(ol).id }, src, zz, x, y)),
-      );
-      if (!shared) keys.push(`${src}/${zz}/${x}/${y}`);
+  if (removing.value[areaId] !== undefined) return;
+  const setPct = (pct: number) => {
+    removing.value = { ...removing.value, [areaId]: pct };
+  };
+  setPct(0);
+  try {
+    if (current?.area === areaId) {
+      current.stop = true;
+      while (current?.area === areaId) await new Promise((r) => setTimeout(r, 100));
     }
+    const area = areas.value.find((a) => a.id === areaId);
+    if (!area) return;
+    const others = areas.value.filter((a) => a.id !== areaId);
+    // Диапазоны тайлов других участков считаются один раз: «источник|z» → прямоугольники.
+    const keep = new Map<string, TileRange[]>();
+    for (const o of others) {
+      for (const l of o.layers) {
+        if (l.kind === 'places') continue;
+        const src = sourceOf(l).id;
+        for (let zz = l.z0; zz <= l.z1; zz++) {
+          const k = `${src}|${zz}`;
+          keep.set(k, [...(keep.get(k) ?? []), tileRange(o.bounds, zz, l.ellipsoidal)]);
+        }
+      }
+    }
+    const total = area.layers.reduce((n, l) => n + (l.kind === 'places' ? 0 : l.total), 0) || 1;
+    let seen = 0;
+    let keys: string[] = [];
+    const flushKeys = async () => {
+      if (keys.length) await dbDeleteMany('tiles', keys);
+      keys = [];
+      setPct(Math.min(99, Math.round((seen / total) * 100)));
+    };
+    for (const l of area.layers) {
+      if (l.kind === 'places') continue;
+      const src = sourceOf(l).id;
+      for (const [zz, x, y] of eachTile(area.bounds, l.z0, l.z1, l.ellipsoidal)) {
+        seen++;
+        const ranges = keep.get(`${src}|${zz}`);
+        if (!ranges?.some((r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1))
+          keys.push(`${src}/${zz}/${x}/${y}`);
+        if (keys.length >= 5000) await flushKeys();
+      }
+    }
+    await flushKeys();
+    await dbDeleteMany('assets', [`places/${areaId}`]);
+    areas.value = others;
+    save(true);
+    placesVersion.value++;
+  } finally {
+    removing.value = Object.fromEntries(Object.entries(removing.value).filter(([k]) => k !== areaId));
   }
-  for (let i = 0; i < keys.length; i += 2000) await dbDeleteMany('tiles', keys.slice(i, i + 2000));
-  await dbDeleteMany('assets', [`places/${areaId}`]);
-  areas.value = others;
-  save(true);
-  placesVersion.value++;
 }
 
 /** Все скачанные названия — для слоя подписей на карте. */

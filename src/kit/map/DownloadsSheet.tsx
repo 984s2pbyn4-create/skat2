@@ -1,3 +1,4 @@
+import type preact from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import type maplibregl from 'maplibre-gl';
 import { countTiles, type Bounds } from '@core/geo/tiles';
@@ -8,7 +9,7 @@ import { Sheet } from '@kit/ui/Sheet';
 import { storageUsage } from '@platform/storage/db';
 import { DEM } from '@platform/tiles/elevation';
 import { basemapById } from './basemaps';
-import { addArea, addLayers, areas, pause, removeArea, resume } from './downloads';
+import { addArea, addLayers, areas, pause, placesSince, removeArea, removing, resume } from './downloads';
 
 const LIMIT = 60_000;
 const KB: Record<DownloadLayer['kind'], number> = { tiles: 20, dem: 90, places: 0 };
@@ -172,77 +173,138 @@ export function DownloadsSheet({ map, basemap, offline, onClose }: Props) {
         <h2>Скачано</h2>
         <p class="k-muted">Занято на устройстве: {usage}</p>
         {areas.value.length === 0 && <p class="k-muted">Пока ничего не скачано.</p>}
-        {areas.value.map((a) => (
-          <div key={a.id} class="m-area">
-            <div class="k-row">
-              <b>{a.name}</b>
-              <span class="k-muted">{new Date(a.created).toLocaleDateString('ru-RU')}</span>
-            </div>
-            {a.layers.map((l, i) => (
-              <div key={i} class="m-job">
-                <div class="k-row">
-                  <span>{layerTitle(l)}</span>
-                  <span class="k-muted">
-                    {STATE[l.state]}
-                    {l.kind !== 'places'
-                      ? ` · ${fmt(l.cursor)} из ${fmt(l.total)}`
-                      : l.ok
-                        ? ` · ${fmt(l.ok)} назв.`
-                        : ''}{' '}
-                    · {mb(l.bytes)}
-                  </span>
-                </div>
-                {l.kind !== 'places' && (
-                  <div class="m-bar">
-                    <i style={{ width: `${layerProgress(l)}%` }} />
-                  </div>
-                )}
-                {l.error && <p class="k-pin-msg err">{l.error}</p>}
-                <div class="k-row">
-                  {(l.state === 'running' || l.state === 'queued') && (
-                    <Button onClick={() => pause(a.id, i)}>Пауза</Button>
-                  )}
-                  {(l.state === 'paused' || l.state === 'error') && (
-                    <Button onClick={() => resume(a.id, i)}>Продолжить</Button>
-                  )}
-                </div>
+        {areas.value.map((a) => {
+          const del = removing.value[a.id];
+          return (
+            <div key={a.id} class="m-area">
+              <div class="k-row">
+                <b>{a.name}</b>
+                <span class="k-muted">{new Date(a.created).toLocaleDateString('ru-RU')}</span>
               </div>
-            ))}
-            <div class="k-row">
-              <Button
-                onClick={() => {
-                  map.fitBounds(
-                    [
-                      [a.bounds.w, a.bounds.s],
-                      [a.bounds.e, a.bounds.n],
-                    ],
-                    { padding: 20 },
-                  );
-                  onClose();
-                }}
-              >
-                Показать
-              </Button>
-              <Button onClick={() => setExtend(a)}>Докачать</Button>
-              <Button onClick={() => void remove(a)}>Удалить</Button>
+              {a.layers.map((l, i) => (
+                <LayerRow
+                  key={i}
+                  l={l}
+                  busy={del !== undefined}
+                  onPause={() => pause(a.id, i)}
+                  onResume={() => resume(a.id, i)}
+                />
+              ))}
+              {del !== undefined ? (
+                <>
+                  <p>Удаление… {del} %</p>
+                  <div class="m-bar">
+                    <i style={{ width: `${del}%` }} />
+                  </div>
+                </>
+              ) : (
+                <div class="k-row">
+                  <Button
+                    onClick={() => {
+                      map.fitBounds(
+                        [
+                          [a.bounds.w, a.bounds.s],
+                          [a.bounds.e, a.bounds.n],
+                        ],
+                        { padding: 20 },
+                      );
+                      onClose();
+                    }}
+                  >
+                    Показать
+                  </Button>
+                  <Button onClick={() => setExtend(a)}>Докачать</Button>
+                  <Button onClick={() => void remove(a)}>Удалить</Button>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </section>
     </Sheet>
   );
 }
 
-/** Общий ход активных загрузок, % — для кнопки на карте. null — ничего не качается. */
-export function activeProgress(list: readonly DownloadArea[]): number | null {
+/** Секунды с начала запроса названий — обновляются каждую секунду. */
+function Elapsed() {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const since = placesSince.value;
+  return <>{since ? Math.round((Date.now() - since) / 1000) : 0} с</>;
+}
+
+/** Строка слоя участка: что качается, ход, пауза и продолжение. */
+function LayerRow({
+  l,
+  busy,
+  onPause,
+  onResume,
+}: {
+  readonly l: DownloadLayer;
+  readonly busy: boolean;
+  readonly onPause: () => void;
+  readonly onResume: () => void;
+}) {
+  const places = l.kind === 'places';
+  let status: preact.ComponentChildren;
+  if (places && l.state === 'running')
+    status = (
+      <>
+        запрос к серверу названий… <Elapsed />
+      </>
+    );
+  else if (places && l.state === 'done') status = `готово · ${fmt(l.ok)} назв.`;
+  else if (places) status = STATE[l.state];
+  else status = `${STATE[l.state]} · ${fmt(l.cursor)} из ${fmt(l.total)} · ${mb(l.bytes)}`;
+  return (
+    <div class="m-job">
+      <div class="k-row">
+        <span>{layerTitle(l)}</span>
+        <span class="k-muted">{status}</span>
+      </div>
+      {places ? (
+        l.state === 'running' && (
+          <div class="m-bar busy">
+            <i />
+          </div>
+        )
+      ) : (
+        <div class="m-bar">
+          <i style={{ width: `${layerProgress(l)}%` }} />
+        </div>
+      )}
+      {l.error && <p class="k-pin-msg err">{l.error}</p>}
+      {!busy && (
+        <div class="k-row">
+          {(l.state === 'running' || l.state === 'queued') && !places && (
+            <Button onClick={onPause}>Пауза</Button>
+          )}
+          {(l.state === 'paused' || l.state === 'error') && <Button onClick={onResume}>Продолжить</Button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Общий ход активных загрузок для кнопки на карте: проценты, «busy» — идут только названия, null — ничего. */
+export function activeProgress(list: readonly DownloadArea[]): number | 'busy' | null {
   let done = 0;
   let total = 0;
+  let busy = false;
   for (const a of list) {
     for (const l of a.layers) {
       if (l.state !== 'running' && l.state !== 'queued') continue;
+      if (l.kind === 'places') {
+        busy = true;
+        continue;
+      }
       done += l.cursor;
       total += l.total || 1;
     }
   }
-  return total ? Math.round((done / total) * 100) : null;
+  if (total) return Math.round((done / total) * 100);
+  return busy ? 'busy' : null;
 }

@@ -21,6 +21,7 @@ export function LayersSheet({ view, onChange, onDownload, onClose }: Props) {
   const [maxZoom, setMaxZoom] = useState(19);
   const [dark, setDark] = useState(false);
   const [error, setError] = useState('');
+  const [adding, setAdding] = useState(false);
   useEffect(() => {
     tiles.count().then(setCount, () => setCount(null));
   }, []);
@@ -44,6 +45,7 @@ export function LayersSheet({ view, onChange, onDownload, onClose }: Props) {
     onChange({ custom: [...view.custom, m], basemap: m.id });
     setName('');
     setUrl('');
+    setAdding(false);
   };
   const remove = (id: string) => {
     if (!confirm('Удалить эту карту из списка?')) return;
@@ -79,41 +81,55 @@ export function LayersSheet({ view, onChange, onDownload, onClose }: Props) {
         ))}
       </section>
       <section class="k-section">
-        <h2>Своя карта по адресу</h2>
+        <h2>Своя карта</h2>
         <p class="k-muted">
-          Шаблон: {'{z} {x} {y}'}, для TMS — {'{-y}'}, для Bing — {'{q}'}, поддомены — {'{s}'}.
+          Подключение сервера карт, которого нет в списке (например, внутреннего). Нужен шаблон адреса тайла:{' '}
+          {'{z}'} — масштаб, {'{x}'} и {'{y}'} — номер тайла. Пример: https://a.tile.opentopomap.org/
+          {'{z}/{x}/{y}'}.png. Некоторые серверы не отдают карту браузеру — тогда она не загрузится.
         </p>
-        <div class="m-add">
-          <input
-            type="text"
-            placeholder="Название"
-            value={name}
-            onInput={(e) => setName(e.currentTarget.value)}
-          />
-          <input
-            type="url"
-            placeholder="https://…/{z}/{x}/{y}.png"
-            value={url}
-            onInput={(e) => setUrl(e.currentTarget.value)}
-          />
-          <div class="k-row">
-            Макс. уровень
+        {!adding ? (
+          <Button onClick={() => setAdding(true)}>Добавить свою карту…</Button>
+        ) : (
+          <div class="m-add">
             <input
-              class="k-field"
-              type="number"
-              min={1}
-              max={22}
-              value={maxZoom}
-              onInput={(e) => setMaxZoom(Math.min(22, Math.max(1, Number(e.currentTarget.value) || 19)))}
+              type="text"
+              placeholder="Название, например «Топо штаба»"
+              value={name}
+              onInput={(e) => setName(e.currentTarget.value)}
             />
-            <label class="k-opt">
-              <input type="checkbox" checked={dark} onChange={(e) => setDark(e.currentTarget.checked)} />
-              Тёмная (спутник)
-            </label>
+            <input
+              type="url"
+              placeholder="https://сервер/{z}/{x}/{y}.png"
+              value={url}
+              onInput={(e) => setUrl(e.currentTarget.value)}
+            />
+            <div class="k-row">
+              Макс. масштаб
+              <input
+                class="k-field"
+                type="number"
+                min={1}
+                max={22}
+                value={maxZoom}
+                onInput={(e) => setMaxZoom(Math.min(22, Math.max(1, Number(e.currentTarget.value) || 19)))}
+              />
+              <label class="k-opt">
+                <input type="checkbox" checked={dark} onChange={(e) => setDark(e.currentTarget.checked)} />
+                Тёмная (спутник) — сетка будет светлой
+              </label>
+            </div>
+            <p class="k-muted">
+              Также понимает {'{-y}'} (TMS), {'{q}'} (Bing) и {'{s}'} (поддомен).
+            </p>
+            {error && <p class="k-note">{error}</p>}
+            <div class="k-row">
+              <Button variant="primary" onClick={add}>
+                Добавить
+              </Button>
+              <Button onClick={() => setAdding(false)}>Отмена</Button>
+            </div>
           </div>
-          {error && <p class="k-note">{error}</p>}
-          <Button onClick={add}>Добавить карту</Button>
-        </div>
+        )}
       </section>
       <section class="k-section">
         <h2>Наложения</h2>
