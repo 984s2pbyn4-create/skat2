@@ -1,0 +1,66 @@
+# Публикует сайт одним деплоем: main → /skat2/, dev → /skat2/beta/.
+# Файл создаётся вручную. Settings → Pages → Source: GitHub Actions.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Сборка main и dev
+        run: |
+          set -euo pipefail
+          REPO="https://github.com/${GITHUB_REPOSITORY}.git"
+          mkdir -p site
+          build() {
+            rm -rf w
+            git clone -q --depth 1 -b "$1" "$REPO" w || return 1
+            mkdir -p "site/$2"
+            if [ -f w/package.json ]; then
+              (cd w && npm ci --no-audit --no-fund && npm run build)
+              cp -a w/dist/. "site/$2/"
+            else
+              rm -rf w/.git w/.github
+              cp -a w/. "site/$2/"
+            fi
+          }
+          build main .
+          build dev beta || echo "Ветки dev пока нет"
+          if [ ! -f site/index.html ] && [ -f site/beta/index.html ]; then
+            printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=beta/"><title>СКАТ 2.0</title>' > site/index.html
+          fi
+          touch site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
