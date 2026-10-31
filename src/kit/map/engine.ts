@@ -45,6 +45,14 @@ export function rasterSource(b: Basemap) {
   };
 }
 
+/** Скачанные названия: вид пункта, с какого масштаба показывать, размер шрифта. */
+const PLACE_LEVELS: ReadonlyArray<readonly [string, number, number]> = [
+  ['c', 6, 15],
+  ['t', 8, 13],
+  ['v', 10.5, 12],
+  ['h', 12.5, 11],
+];
+
 /** Цвета сетки как в 6.x: тёмные линии на светлой подложке, светлые — на спутнике. */
 function gridColors(dark: boolean) {
   return dark
@@ -68,7 +76,11 @@ export function buildStyle(b: Basemap): StyleSpecification {
   return {
     version: 8,
     glyphs: `${new URL('fonts/', document.baseURI).href}{fontstack}/{range}.pbf`,
-    sources: { base: rasterSource(b), grid: { type: 'geojson', data: EMPTY_FC } },
+    sources: {
+      base: rasterSource(b),
+      grid: { type: 'geojson', data: EMPTY_FC },
+      places: { type: 'geojson', data: EMPTY_FC },
+    },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#c9d0c6' } },
       { id: 'base', type: 'raster', source: 'base' },
@@ -115,6 +127,20 @@ export function buildStyle(b: Basemap): StyleSpecification {
         },
         paint: { 'text-color': c.text, 'text-halo-color': c.textHalo, 'text-halo-width': 1.5 },
       },
+      ...PLACE_LEVELS.map(([k, minzoom, size]) => ({
+        id: `places-${k}`,
+        type: 'symbol' as const,
+        source: 'places',
+        minzoom,
+        filter: ['==', ['get', 'k'], k] as ['==', ['get', string], string],
+        layout: {
+          'text-field': ['get', 'n'] as ['get', string],
+          'text-font': FONT,
+          'text-size': size,
+          'text-padding': 4,
+        },
+        paint: { 'text-color': c.text, 'text-halo-color': c.textHalo, 'text-halo-width': 1.6 },
+      })),
     ],
   };
 }
@@ -127,6 +153,26 @@ export function applyGridColors(map: maplibregl.Map, dark: boolean): void {
   map.setPaintProperty('grid-l', 'line-color', c.line);
   map.setPaintProperty('grid-t', 'text-color', c.text);
   map.setPaintProperty('grid-t', 'text-halo-color', c.textHalo);
+  for (const [k] of PLACE_LEVELS) {
+    map.setPaintProperty(`places-${k}`, 'text-color', c.text);
+    map.setPaintProperty(`places-${k}`, 'text-halo-color', c.textHalo);
+  }
+}
+
+/** Показать скачанные названия населённых пунктов (или скрыть — пустой список). */
+export function setPlaces(
+  map: maplibregl.Map,
+  places: ReadonlyArray<readonly [string, number, number, string]>,
+): void {
+  const src = map.getSource('places') as maplibregl.GeoJSONSource | undefined;
+  src?.setData({
+    type: 'FeatureCollection',
+    features: places.map(([n, lat, lon, k]) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [lon, lat] },
+      properties: { n, k },
+    })),
+  });
 }
 
 export function setBasemap(map: maplibregl.Map, b: Basemap): void {

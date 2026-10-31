@@ -24,8 +24,13 @@ const MapViewSchema = z.object({
   offline: z.boolean(),
   coords: z.enum(COORD_FORMATS),
   custom: z.optional(z.array(CustomMapSchema)),
+  places: z.optional(z.boolean()),
 });
-export type MapView = Omit<z.infer<typeof MapViewSchema>, 'custom'> & { custom: CustomMap[] };
+export type MapView = Omit<z.infer<typeof MapViewSchema>, 'custom' | 'places'> & {
+  custom: CustomMap[];
+  /** Показывать скачанные названия населённых пунктов. */
+  places: boolean;
+};
 
 /** Район по умолчанию: X 54 70 000, Y 74 00 000 (СК-42). */
 const [LAT0, LON0] = fromSK(5_470_000, 7_400_000);
@@ -40,9 +45,12 @@ export const DEFAULT_MAP_VIEW: MapView = {
   offline: false,
   coords: 'sk42',
   custom: [],
+  places: true,
 };
 
 export function parseMapView(raw: unknown): MapView {
   const r = MapViewSchema.safeParse(raw);
-  return r.success ? { ...r.data, custom: r.data.custom ?? [] } : DEFAULT_MAP_VIEW;
+  return r.success
+    ? { ...r.data, custom: r.data.custom ?? [], places: r.data.places ?? true }
+    : DEFAULT_MAP_VIEW;
 }

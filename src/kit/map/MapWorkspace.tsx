@@ -10,8 +10,9 @@ import { detectDevice } from '@platform/device/detect';
 import { basemapById, registerCustom } from './basemaps';
 import { elevation } from '@platform/tiles/elevation';
 import { CoordBar } from './CoordBar';
-import { DownloadSheet } from './DownloadSheet';
-import { EMPTY_FC, buildStyle, registerSkatProtocol, setBasemap, tiles } from './engine';
+import { DownloadsSheet, activeProgress } from './DownloadsSheet';
+import { areas, initDownloads, loadPlaces, placesVersion } from './downloads';
+import { EMPTY_FC, buildStyle, registerSkatProtocol, setBasemap, setPlaces, tiles } from './engine';
 import { watchHeading } from './heading';
 import { LayersSheet } from './LayersSheet';
 import { loadMapView, saveMapView } from './persist';
@@ -47,7 +48,7 @@ export function MapWorkspace({ title, onExit }: Props) {
   const viewRef = useRef<MapView | null>(null);
   const [view, setView] = useState<MapView | null>(null);
   const [map, setMap] = useState<maplibregl.Map | null>(null);
-  const [sheet, setSheet] = useState<'layers' | 'download' | null>(null);
+  const [sheet, setSheet] = useState<'layers' | 'downloads' | null>(null);
   const [heading, setHeading] = useState<(() => void) | null>(null);
   const [message, setMessage] = useState('');
   const [height, setHeight] = useState<number | null | undefined>(undefined);
@@ -113,6 +114,7 @@ export function MapWorkspace({ title, onExit }: Props) {
       updateGrid(m, v.grid);
       updateHeight();
       setMap(m);
+      void initDownloads();
     });
     return () => {
       clearTimeout(t);
@@ -123,8 +125,20 @@ export function MapWorkspace({ title, onExit }: Props) {
 
   useEffect(() => () => heading?.(), [heading]);
 
+  const showPlaces = view?.places ?? true;
+  const pv = placesVersion.value;
+  useEffect(() => {
+    if (!map) return;
+    let alive = true;
+    void loadPlaces().then((list) => alive && setPlaces(map, showPlaces ? list : []));
+    return () => {
+      alive = false;
+    };
+  }, [map, pv, showPlaces]);
+
   if (!view) return <p class="k-center k-muted">Загрузка карты…</p>;
   const base = basemapById(view.basemap);
+  const progress = activeProgress(areas.value);
 
   const change = (patch: Partial<MapView>) => {
     update(patch);
@@ -175,6 +189,9 @@ export function MapWorkspace({ title, onExit }: Props) {
             Компас
           </Button>
         )}
+        <Button variant={progress !== null ? 'primary' : 'default'} onClick={() => setSheet('downloads')}>
+          {progress !== null ? `Загрузки ${progress} %` : 'Загрузки'}
+        </Button>
         <Button onClick={() => setSheet('layers')}>Слои</Button>
       </header>
       {view.offline && <div class="m-badge">Без сети</div>}
@@ -190,12 +207,12 @@ export function MapWorkspace({ title, onExit }: Props) {
         <LayersSheet
           view={view}
           onChange={change}
-          onDownload={() => setSheet('download')}
+          onDownload={() => setSheet('downloads')}
           onClose={() => setSheet(null)}
         />
       )}
-      {sheet === 'download' && map && (
-        <DownloadSheet map={map} basemap={base} offline={view.offline} onClose={() => setSheet(null)} />
+      {sheet === 'downloads' && map && (
+        <DownloadsSheet map={map} basemap={base} offline={view.offline} onClose={() => setSheet(null)} />
       )}
     </div>
   );

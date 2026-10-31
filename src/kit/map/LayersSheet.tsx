@@ -125,6 +125,14 @@ export function LayersSheet({ view, onChange, onDownload, onClose }: Props) {
           />
           Километровая сетка СК-42
         </label>
+        <label class="k-opt">
+          <input
+            type="checkbox"
+            checked={view.places}
+            onChange={(e) => onChange({ places: e.currentTarget.checked })}
+          />
+          Скачанные названия населённых пунктов
+        </label>
       </section>
       <section class="k-section">
         <h2>Офлайн</h2>
@@ -138,7 +146,7 @@ export function LayersSheet({ view, onChange, onDownload, onClose }: Props) {
         </label>
         <p class="k-muted">Сохранено тайлов: {count ?? '…'}</p>
         <div class="k-row">
-          <Button onClick={onDownload}>Скачать участок</Button>
+          <Button onClick={onDownload}>Загрузки…</Button>
           <Button onClick={() => void clear()}>Очистить</Button>
         </div>
       </section>

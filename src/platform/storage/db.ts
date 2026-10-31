@@ -84,3 +84,11 @@ export async function dbCount(store: StoreName): Promise<number> {
   const db = await openDb();
   return req(db.transaction(store).objectStore(store).count());
 }
+
+export async function dbDeleteMany(store: StoreName, keys: readonly IDBValidKey[]): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(store, 'readwrite');
+  const s = tx.objectStore(store);
+  for (const k of keys) s.delete(k);
+  return done(tx);
+}
