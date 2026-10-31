@@ -6,11 +6,13 @@ import { COORD_FORMATS, type CoordFormat } from '@core/model/mapView';
 interface Props {
   readonly map: maplibregl.Map;
   readonly format: CoordFormat;
+  /** Высота центра, м: undefined — считается, null — нет данных. */
+  readonly height: number | null | undefined;
   readonly onFormat: (f: CoordFormat) => void;
 }
 
-/** Координаты центра карты (перекрестие). Нажатие на формат — следующий формат. */
-export function CoordBar({ map, format, onFormat }: Props) {
+/** Координаты и высота центра карты (перекрестие). Нажатие на формат — следующий формат. */
+export function CoordBar({ map, format, height, onFormat }: Props) {
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -45,6 +47,9 @@ export function CoordBar({ map, format, onFormat }: Props) {
         {COORD_LABEL[format]}
       </button>
       <span class="m-coords-v">{text}</span>
+      <span class="m-coords-h" title="Высота над уровнем моря">
+        H {height === undefined ? '…' : height === null ? '—' : `${Math.round(height)} м`}
+      </span>
       <button type="button" class="m-coords-c" onClick={copy}>
         {copied ? 'Скопировано' : 'Копировать'}
       </button>

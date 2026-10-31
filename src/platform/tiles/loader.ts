@@ -30,20 +30,29 @@ const isAbort = (e: unknown): boolean => e instanceof DOMException && e.name ===
 
 /**
  * Тайлы (CORE-02, CORE-03): кэш IndexedDB → сеть.
- * Яндекс (3395) пересчитывается в 3857 построчно; нет тайла — увеличивается родительский.
+ * Яндекс (3395) пересчитывается в 3857 построчно; нет тайла — увеличивается сохранённый родительский
+ * (из сети родительские не запрашиваются: это замедляло карту).
  */
 export class TileLoader {
   readonly stats = { hit: 0, net: 0, over: 0, miss: 0 };
   /** Только кэш, без сети. */
   offline = false;
-  /** Поставщик не отдаёт тайлы браузеру (нет CORS). */
-  onBlocked: ((b: Basemap) => void) | null = null;
-  private readonly blocked = new Set<string>();
+  /** Поставщик подряд не отдаёт тайлы — сообщить один раз за сеанс. */
+  onFailing: ((b: Basemap) => void) | null = null;
+  private readonly fails = new Map<string, number>();
+  private readonly reported = new Set<string>();
   private readonly pending = new Map<string, ArrayBuffer>();
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   /** Тайл поставщика в его собственной сетке. */
-  async raw(b: Basemap, z: number, x: number, y: number, signal?: AbortSignal): Promise<ArrayBuffer | null> {
+  async raw(
+    b: Basemap,
+    z: number,
+    x: number,
+    y: number,
+    signal?: AbortSignal,
+    cachedOnly = false,
+  ): Promise<ArrayBuffer | null> {
     const key = `${b.id}/${z}/${x}/${y}`;
     const p = this.pending.get(key);
     if (p) return p.slice(0);
@@ -52,7 +61,7 @@ export class TileLoader {
       this.stats.hit++;
       return cached;
     }
-    if (this.offline || this.blocked.has(b.id)) {
+    if (this.offline || cachedOnly) {
       this.stats.miss++;
       return null;
     }
@@ -61,24 +70,36 @@ export class TileLoader {
       r = await fetch(tileUrl(b, z, x, y), { mode: 'cors', signal });
     } catch (e) {
       if (isAbort(e)) throw e;
-      if (navigator.onLine !== false) {
-        this.blocked.add(b.id);
-        this.onBlocked?.(b);
-      }
+      this.fail(b);
       return null;
     }
-    if (!r.ok) return null;
+    if (!r.ok) {
+      if (r.status !== 404) this.fail(b);
+      return null;
+    }
     const buf = await r.arrayBuffer();
     if (!buf.byteLength) return null;
+    this.fails.set(b.id, 0);
     this.stats.net++;
     this.pending.set(key, buf.slice(0));
     this.timer ??= setTimeout(() => void this.flush(), 700);
     return buf;
   }
 
-  /** Тайл в сетке 3857 для карты. */
-  private async own(b: Basemap, z: number, x: number, y: number, signal?: AbortSignal) {
-    return b.ellipsoidal ? this.compose3395(b, z, x, y, signal) : this.raw(b, z, x, y, signal);
+  private fail(b: Basemap): void {
+    const n = (this.fails.get(b.id) ?? 0) + 1;
+    this.fails.set(b.id, n);
+    if (n >= 8 && navigator.onLine !== false && !this.reported.has(b.id)) {
+      this.reported.add(b.id);
+      this.onFailing?.(b);
+    }
+  }
+
+  /** Тайл в сетке 3857 для карты. cachedOnly — только сохранённые. */
+  private async own(b: Basemap, z: number, x: number, y: number, signal?: AbortSignal, cachedOnly = false) {
+    return b.ellipsoidal
+      ? this.compose3395(b, z, x, y, signal, cachedOnly)
+      : this.raw(b, z, x, y, signal, cachedOnly);
   }
 
   async get(
@@ -89,7 +110,7 @@ export class TileLoader {
     signal?: AbortSignal,
     depth = 0,
   ): Promise<ArrayBuffer | null> {
-    const own = await this.own(b, z, x, y, signal);
+    const own = await this.own(b, z, x, y, signal, depth > 0);
     if (own || depth >= 6 || z === 0) return own;
     const parent = await this.get(b, z - 1, x >> 1, y >> 1, signal, depth + 1);
     if (!parent) return null;
@@ -101,7 +122,14 @@ export class TileLoader {
     return toBuffer(c);
   }
 
-  private async compose3395(b: Basemap, z: number, x: number, y: number, signal?: AbortSignal) {
+  private async compose3395(
+    b: Basemap,
+    z: number,
+    x: number,
+    y: number,
+    signal?: AbortSignal,
+    cachedOnly = false,
+  ) {
     const n = 2 ** z;
     const world = 256 * n;
     const ys: number[] = [];
@@ -110,7 +138,7 @@ export class TileLoader {
     const t1 = Math.min(n - 1, Math.floor((ys[255] ?? 0) / 256));
     const rows: number[] = [];
     for (let t = t0; t <= t1; t++) rows.push(t);
-    const bufs = await Promise.all(rows.map((t) => this.raw(b, z, x, t, signal)));
+    const bufs = await Promise.all(rows.map((t) => this.raw(b, z, x, t, signal, cachedOnly)));
     if (bufs.some((v) => !v)) return null;
     const imgs = new Map<number, ImageBitmap>();
     for (let i = 0; i < rows.length; i++)
@@ -148,8 +176,9 @@ export class TileLoader {
     await dbReplace('tiles', []);
   }
 
-  /** Снять запрет с поставщиков (после смены режима сети). */
-  resetBlocked(): void {
-    this.blocked.clear();
+  /** Сбросить счётчики сбоев (после смены подложки или режима сети). */
+  resetFailures(): void {
+    this.fails.clear();
+    this.reported.clear();
   }
 }

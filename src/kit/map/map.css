@@ -96,3 +96,29 @@
 :root[data-theme='red'] .m-map {
   filter: sepia(1) saturate(4) hue-rotate(-50deg) brightness(0.6);
 }
+.m-coords-h {
+  padding: 0 6px;
+  font-family: var(--font-num);
+  font-size: 15px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.m-add {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.m-add input[type='text'],
+.m-add input[type='url'] {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+.m-del {
+  margin-left: auto;
+}

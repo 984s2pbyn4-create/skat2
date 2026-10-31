@@ -45,8 +45,26 @@ export function rasterSource(b: Basemap) {
   };
 }
 
-/** Стиль карты: подложка, сетка СК-42 с подписями. Шрифты подписей — в сборке (public/fonts). */
+/** Цвета сетки как в 6.x: тёмные линии на светлой подложке, светлые — на спутнике. */
+function gridColors(dark: boolean) {
+  return dark
+    ? {
+        line: 'rgba(255,255,255,0.62)',
+        halo: 'rgba(0,0,0,0.28)',
+        text: '#f4f4f0',
+        textHalo: 'rgba(0,0,0,0.65)',
+      }
+    : {
+        line: 'rgba(30,30,30,0.62)',
+        halo: 'rgba(255,255,255,0.4)',
+        text: '#222222',
+        textHalo: 'rgba(255,255,255,0.85)',
+      };
+}
+
+/** Стиль карты: подложка и сетка СК-42 с подписями квадратов. Шрифт подписей — в сборке (public/fonts). */
 export function buildStyle(b: Basemap): StyleSpecification {
+  const c = gridColors(Boolean(b.dark));
   return {
     version: 8,
     glyphs: `${new URL('fonts/', document.baseURI).href}{fontstack}/{range}.pbf`,
@@ -55,11 +73,25 @@ export function buildStyle(b: Basemap): StyleSpecification {
       { id: 'bg', type: 'background', paint: { 'background-color': '#c9d0c6' } },
       { id: 'base', type: 'raster', source: 'base' },
       {
+        id: 'grid-s',
+        type: 'line',
+        source: 'grid',
+        filter: ['has', 's'],
+        paint: { 'line-color': c.line, 'line-width': 0.7, 'line-opacity': 0.55, 'line-dasharray': [3, 5] },
+      },
+      {
+        id: 'grid-h',
+        type: 'line',
+        source: 'grid',
+        filter: ['has', 'k'],
+        paint: { 'line-color': c.halo, 'line-width': 2.5 },
+      },
+      {
         id: 'grid-l',
         type: 'line',
         source: 'grid',
-        filter: ['!', ['has', 'zb']],
-        paint: { 'line-color': '#d4322c', 'line-width': 1, 'line-opacity': 0.85 },
+        filter: ['has', 'k'],
+        paint: { 'line-color': c.line, 'line-width': 1 },
       },
       {
         id: 'grid-z',
@@ -72,23 +104,35 @@ export function buildStyle(b: Basemap): StyleSpecification {
         id: 'grid-t',
         type: 'symbol',
         source: 'grid',
-        filter: ['has', 'k'],
+        filter: ['has', 't'],
         layout: {
-          'symbol-placement': 'line',
-          'symbol-spacing': 280,
-          'text-field': ['get', 'k'],
+          'text-field': ['get', 't'],
           'text-font': FONT,
-          'text-size': 12,
+          'text-size': ['interpolate', ['linear'], ['zoom'], 12, 10, 15, 14],
+          'text-anchor': 'bottom-left',
+          'text-offset': [0.3, -0.25],
+          'text-allow-overlap': true,
         },
-        paint: { 'text-color': '#b0201b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+        paint: { 'text-color': c.text, 'text-halo-color': c.textHalo, 'text-halo-width': 1.5 },
       },
     ],
   };
+}
+
+/** Перекрасить сетку под подложку. */
+export function applyGridColors(map: maplibregl.Map, dark: boolean): void {
+  const c = gridColors(dark);
+  map.setPaintProperty('grid-s', 'line-color', c.line);
+  map.setPaintProperty('grid-h', 'line-color', c.halo);
+  map.setPaintProperty('grid-l', 'line-color', c.line);
+  map.setPaintProperty('grid-t', 'text-color', c.text);
+  map.setPaintProperty('grid-t', 'text-halo-color', c.textHalo);
 }
 
 export function setBasemap(map: maplibregl.Map, b: Basemap): void {
   if (map.getLayer('base')) map.removeLayer('base');
   if (map.getSource('base')) map.removeSource('base');
   map.addSource('base', rasterSource(b));
-  map.addLayer({ id: 'base', type: 'raster', source: 'base' }, 'grid-l');
+  map.addLayer({ id: 'base', type: 'raster', source: 'base' }, 'grid-s');
+  applyGridColors(map, Boolean(b.dark));
 }

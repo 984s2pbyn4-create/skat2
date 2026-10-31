@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './map.css';
-import { gridStepForZoom, skGrid } from '@core/geo/grid';
+import { planGrid, pxPerKm, skGrid } from '@core/geo/grid';
+import { toSK } from '@core/geo/sk42';
 import type { MapView } from '@core/model/mapView';
 import { Button } from '@kit/ui/Button';
 import { detectDevice } from '@platform/device/detect';
-import { basemapById } from './basemaps';
+import { basemapById, registerCustom } from './basemaps';
+import { elevation } from '@platform/tiles/elevation';
 import { CoordBar } from './CoordBar';
 import { DownloadSheet } from './DownloadSheet';
 import { EMPTY_FC, buildStyle, registerSkatProtocol, setBasemap, tiles } from './engine';
@@ -24,16 +26,19 @@ const touch = detectDevice() !== 'desktop';
 function updateGrid(map: maplibregl.Map, on: boolean): void {
   const src = map.getSource('grid') as GeoJSONSource | undefined;
   if (!src) return;
-  if (!on || map.getZoom() < 6) {
+  const c = map.getCenter();
+  const plan = on ? planGrid(pxPerKm(map.getZoom(), c.lat)) : null;
+  if (!plan) {
     src.setData(EMPTY_FC);
     return;
   }
   const b = map.getBounds();
-  const r = skGrid(
+  const features = skGrid(
     { w: b.getWest(), s: b.getSouth(), e: b.getEast(), n: b.getNorth() },
-    gridStepForZoom(map.getZoom()),
+    toSK(c.lat, c.lng).zone,
+    plan,
   );
-  src.setData({ type: 'FeatureCollection', features: r.features });
+  src.setData({ type: 'FeatureCollection', features });
 }
 
 /** Рабочее поле с картой: подложки, сетка СК-42, координаты, компас, офлайн-участки. */
@@ -45,12 +50,14 @@ export function MapWorkspace({ title, onExit }: Props) {
   const [sheet, setSheet] = useState<'layers' | 'download' | null>(null);
   const [heading, setHeading] = useState<(() => void) | null>(null);
   const [message, setMessage] = useState('');
+  const [height, setHeight] = useState<number | null | undefined>(undefined);
 
   useEffect(() => {
     let alive = true;
     void loadMapView().then((v) => {
       if (!alive) return;
       viewRef.current = v;
+      registerCustom(v.custom);
       setView(v);
     });
     return () => {
@@ -72,8 +79,8 @@ export function MapWorkspace({ title, onExit }: Props) {
     if (!v || !box.current) return;
     registerSkatProtocol();
     tiles.offline = v.offline;
-    tiles.onBlocked = (b) =>
-      setMessage(`${b.name}: браузер не даёт загружать тайлы. Выберите другую подложку.`);
+    tiles.onFailing = (b) =>
+      setMessage(`${b.name}: тайлы не загружаются. Проверьте сеть или выберите другую подложку.`);
     const m = new maplibregl.Map({
       container: box.current,
       style: buildStyle(basemapById(v.basemap)),
@@ -86,8 +93,16 @@ export function MapWorkspace({ title, onExit }: Props) {
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
     m.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
     let t: ReturnType<typeof setTimeout> | undefined;
+    let hSeq = 0;
+    const updateHeight = () => {
+      const seq = ++hSeq;
+      const c = m.getCenter();
+      setHeight(undefined);
+      void elevation(tiles, c.lat, c.lng).then((h) => seq === hSeq && setHeight(h));
+    };
     m.on('moveend', () => {
       updateGrid(m, viewRef.current?.grid ?? false);
+      updateHeight();
       clearTimeout(t);
       t = setTimeout(() => {
         const c = m.getCenter();
@@ -96,6 +111,7 @@ export function MapWorkspace({ title, onExit }: Props) {
     });
     m.on('load', () => {
       updateGrid(m, v.grid);
+      updateHeight();
       setMap(m);
     });
     return () => {
@@ -113,11 +129,9 @@ export function MapWorkspace({ title, onExit }: Props) {
   const change = (patch: Partial<MapView>) => {
     update(patch);
     if (!map) return;
-    if (patch.offline !== undefined) {
-      tiles.offline = patch.offline;
-      tiles.resetBlocked();
-      setMessage('');
-    }
+    if (patch.custom !== undefined) registerCustom(patch.custom);
+    if (patch.offline !== undefined) tiles.offline = patch.offline;
+    if (patch.basemap !== undefined || patch.offline !== undefined) tiles.resetFailures();
     if (patch.basemap !== undefined || patch.offline !== undefined) {
       setMessage('');
       setBasemap(map, basemapById(patch.basemap ?? view.basemap));
@@ -169,7 +183,9 @@ export function MapWorkspace({ title, onExit }: Props) {
           {message}
         </button>
       )}
-      {map && <CoordBar map={map} format={view.coords} onFormat={(coords) => update({ coords })} />}
+      {map && (
+        <CoordBar map={map} format={view.coords} height={height} onFormat={(coords) => update({ coords })} />
+      )}
       {sheet === 'layers' && (
         <LayersSheet
           view={view}

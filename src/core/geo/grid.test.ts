@@ -1,36 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { gridStepForZoom, skGrid } from './grid';
+import { planGrid, pxPerKm, skGrid } from './grid';
 import { toSK } from './sk42';
 
-describe('сетка СК-42', () => {
-  it('линии лежат на целых километрах', () => {
-    const r = skGrid({ w: 37.5, s: 55.7, e: 37.75, n: 55.8 }, 1000);
-    expect(r.step).toBe(1000);
-    expect(r.lines).toBeGreaterThan(20);
-    const f = r.features.find((x) => x.properties.k !== undefined);
-    const pos = f?.geometry.coordinates[3] ?? [0, 0];
-    const p = toSK(pos[1] ?? 0, pos[0] ?? 0, 7);
-    const offX = Math.abs(p.x - Math.round(p.x / 1000) * 1000);
-    const offY = Math.abs(p.y - Math.round(p.y / 1000) * 1000);
-    expect(Math.min(offX, offY)).toBeLessThan(0.05);
+const B = { w: 38.8, s: 49.3, e: 39.0, n: 49.42 };
+
+describe('сетка СК-42 (как в 6.x)', () => {
+  it('выбор шага по масштабу', () => {
+    expect(planGrid(1)).toBeNull();
+    expect(planGrid(10)).toEqual({ step: 10000, sub: 0, labels: false });
+    expect(planGrid(50)).toEqual({ step: 1000, sub: 0, labels: true });
+    expect(planGrid(150)?.sub).toBeCloseTo(333.33, 1);
+    expect(pxPerKm(12, 49.4)).toBeGreaterThan(60);
   });
-  it('стык зон: граница зоны и линии обеих зон', () => {
-    const r = skGrid({ w: 41.5, s: 55, e: 42.5, n: 55.3 }, 2000);
-    expect(r.features.filter((f) => f.properties.zb).length).toBe(1);
-    const lons = r.features.flatMap((f) =>
-      f.properties.k ? f.geometry.coordinates.map((c) => c[0] as number) : [],
+  it('линии на целых километрах, подписи квадратов XXYY', () => {
+    const plan = planGrid(60);
+    if (!plan) throw new Error('нет плана');
+    const f = skGrid(B, 7, plan);
+    const line = f.find((x) => x.properties.k && x.geometry.type === 'LineString');
+    const c = line?.geometry.type === 'LineString' ? line.geometry.coordinates[5] : undefined;
+    const p = toSK(c?.[1] ?? 0, c?.[0] ?? 0, 7);
+    const off = Math.min(
+      Math.abs(p.x - Math.round(p.x / 1000) * 1000),
+      Math.abs(p.y - Math.round(p.y / 1000) * 1000),
     );
-    expect(Math.min(...lons)).toBeLessThan(42);
-    expect(Math.max(...lons)).toBeGreaterThan(42);
+    expect(off).toBeLessThan(0.05);
+    const labels = f.filter((x) => x.properties.t);
+    expect(labels.length).toBeGreaterThan(50);
+    expect(labels[0]?.properties.t).toMatch(/^\d{4}$/);
   });
-  it('большая область — шаг укрупняется', () => {
-    const r = skGrid({ w: 30, s: 50, e: 40, n: 58 }, 1000, 300);
-    expect(r.step).toBeGreaterThan(1000);
-    expect(r.lines).toBeLessThanOrEqual(600);
+  it('«улитка» — пунктир между километровыми линиями', () => {
+    const f = skGrid({ w: 38.9, s: 49.36, e: 38.95, n: 49.39 }, 7, {
+      step: 1000,
+      sub: 1000 / 3,
+      labels: false,
+    });
+    expect(f.some((x) => x.properties.s)).toBe(true);
   });
-  it('шаг по масштабу', () => {
-    expect(gridStepForZoom(14)).toBe(1000);
-    expect(gridStepForZoom(11.5)).toBe(2000);
-    expect(gridStepForZoom(9)).toBe(10000);
+  it('граница зоны в области', () => {
+    const f = skGrid({ w: 41.9, s: 55, e: 42.1, n: 55.1 }, 7, { step: 1000, sub: 0, labels: false });
+    expect(f.filter((x) => x.properties.zb).length).toBe(1);
   });
 });
