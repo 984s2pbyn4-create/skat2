@@ -4,7 +4,17 @@ import globals from 'globals';
 import { defineConfig } from 'eslint/config';
 
 export default defineConfig(
-  { ignores: ['dist', 'node_modules', 'coverage', 'public', 'inbox', '**/*.html'] },
+  {
+    ignores: [
+      'dist',
+      'node_modules',
+      'coverage',
+      'public',
+      'inbox',
+      '**/*.html',
+      'src/kit/symbols/engine6.js',
+    ],
+  },
   js.configs.recommended,
   tseslint.configs.strict,
   {

@@ -20,11 +20,21 @@ import { MeasureTool } from './MeasureTool';
 import { TrackPanel } from './TrackPanel';
 import { applyLayers, initLayers, layers } from './layersState';
 import { initTrack, track } from './track';
+import type { Side } from '@core/model/objects';
+import type { SymDef } from '@kit/symbols/engine6';
+import { kindOf } from '@kit/symbols/catalog';
+import { attachObjects, type ObjectsLayer } from '@kit/symbols/layer';
+import { ObjectCard } from '@kit/symbols/ObjectCard';
+import { Palette } from '@kit/symbols/Palette';
+import { PlacePanel } from '@kit/symbols/PlacePanel';
+import { doc, history, loadObjects, newId, objects, selected } from '@kit/symbols/store';
 import { loadMapView, saveMapView } from './persist';
 
 interface Props {
   readonly title: string;
   readonly onExit: () => void;
+  /** Ключ обстановки в хранилище (режим). */
+  readonly project?: string;
 }
 
 const touch = detectDevice() !== 'desktop';
@@ -48,16 +58,58 @@ function updateGrid(map: maplibregl.Map, on: boolean): void {
 }
 
 /** Рабочее поле с картой: подложки, сетка СК-42, координаты, компас, офлайн-участки. */
-export function MapWorkspace({ title, onExit }: Props) {
+export function MapWorkspace({ title, onExit, project = 'combat' }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const viewRef = useRef<MapView | null>(null);
   const [view, setView] = useState<MapView | null>(null);
   const [map, setMap] = useState<maplibregl.Map | null>(null);
-  const [sheet, setSheet] = useState<'layers' | 'downloads' | null>(null);
+  const [sheet, setSheet] = useState<'layers' | 'downloads' | 'symbols' | null>(null);
   const [heading, setHeading] = useState<(() => void) | null>(null);
   const [message, setMessage] = useState('');
   const [height, setHeight] = useState<number | null | undefined>(undefined);
   const [tool, setTool] = useState<'measure' | 'track' | { adjust: string } | null>(null);
+  const [side, setSide] = useState<Side>('r');
+  const [placing, setPlacing] = useState<{ sym: SymDef; coords: Array<[number, number]> } | null>(null);
+  const objLayer = useRef<ObjectsLayer | null>(null);
+  const live = useRef({ tool, placing, side });
+  live.current = { tool, placing, side };
+
+  /** Поставить точку знака: точечный — сразу объект, линейный — вершина черновика. */
+  const placeAt = (c: [number, number]) => {
+    const pl = live.current.placing;
+    if (!pl) return;
+    const kind = kindOf(pl.sym);
+    if (kind === 'point') {
+      objects.add({
+        id: newId(),
+        sym: pl.sym.id,
+        kind,
+        side: live.current.side,
+        coords: [c],
+        rot: 0,
+        size: 1,
+        label: '',
+        note: '',
+      });
+      setPlacing(null);
+    } else setPlacing({ ...pl, coords: [...pl.coords, c] });
+  };
+  const finishPlacing = () => {
+    if (!placing) return;
+    const kind = kindOf(placing.sym);
+    objects.add({
+      id: newId(),
+      sym: placing.sym.id,
+      kind,
+      side,
+      coords: placing.coords,
+      rot: 0,
+      size: 1,
+      label: '',
+      note: '',
+    });
+    setPlacing(null);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -135,6 +187,19 @@ export function MapWorkspace({ title, onExit }: Props) {
         paint: { 'line-color': '#ff2d55', 'line-width': 3 },
       });
       setMap(m);
+      void loadObjects(project).then(() => {
+        objLayer.current = attachObjects(m, (id, c) => objects.update(id, { coords: [c] }));
+        objLayer.current.update(doc.value.objects, selected.value, null);
+      });
+      m.on('click', (e) => {
+        const st = live.current;
+        if (st.tool === 'measure') return;
+        if (st.placing) {
+          placeAt([e.lngLat.lng, e.lngLat.lat]);
+          return;
+        }
+        selected.value = objLayer.current?.hit(e.point.x, e.point.y) ?? null;
+      });
       void initDownloads();
     });
     return () => {
@@ -164,6 +229,20 @@ export function MapWorkspace({ title, onExit }: Props) {
         : EMPTY_FC,
     );
   }, [map, trackPts]);
+
+  const objs = doc.value.objects;
+  const sel = selected.value;
+  useEffect(() => {
+    objLayer.current?.update(
+      objs,
+      sel,
+      placing && kindOf(placing.sym) !== 'point'
+        ? { sym: placing.sym.id, side, coords: placing.coords, area: kindOf(placing.sym) === 'area' }
+        : null,
+    );
+  }, [objs, sel, placing, side, map]);
+  useEffect(() => () => objLayer.current?.destroy(), []);
+  const selObj = objs.find((o) => o.id === sel);
 
   const showPlaces = view?.places ?? true;
   const pv = placesVersion.value;
@@ -235,6 +314,15 @@ export function MapWorkspace({ title, onExit }: Props) {
         <Button onClick={() => setSheet('layers')}>Слои</Button>
       </header>
       <div class="m-rail">
+        <Button variant={sheet === 'symbols' ? 'primary' : 'default'} onClick={() => setSheet('symbols')}>
+          Знаки
+        </Button>
+        <Button disabled={!history.value.past.length} onClick={() => objects.undo()}>
+          ↶ Отменить
+        </Button>
+        <Button disabled={!history.value.future.length} onClick={() => objects.redo()}>
+          ↷ Повторить
+        </Button>
         <Button
           variant={tool === 'measure' ? 'primary' : 'default'}
           onClick={() => setTool(tool === 'measure' ? null : 'measure')}
@@ -275,6 +363,34 @@ export function MapWorkspace({ title, onExit }: Props) {
           onAdjust={(id) => {
             setSheet(null);
             setTool({ adjust: id });
+          }}
+          onClose={() => setSheet(null)}
+        />
+      )}
+      {map && placing && (
+        <PlacePanel
+          sym={placing.sym}
+          kind={kindOf(placing.sym)}
+          count={placing.coords.length}
+          onCenter={() => {
+            const c = map.getCenter();
+            placeAt([c.lng, c.lat]);
+          }}
+          onUndo={() => setPlacing({ ...placing, coords: placing.coords.slice(0, -1) })}
+          onDone={finishPlacing}
+          onCancel={() => setPlacing(null)}
+        />
+      )}
+      {map && !placing && tool === null && selObj && <ObjectCard obj={selObj} map={map} />}
+      {sheet === 'symbols' && (
+        <Palette
+          side={side}
+          onSide={setSide}
+          onPick={(s) => {
+            setSheet(null);
+            setTool(null);
+            selected.value = null;
+            setPlacing({ sym: s, coords: [] });
           }}
           onClose={() => setSheet(null)}
         />

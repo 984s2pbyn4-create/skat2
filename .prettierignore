@@ -6,3 +6,5 @@ package-lock.json
 *.html
 public
 inbox
+src/kit/symbols/engine6.js
+src/kit/symbols/symbols6.json
