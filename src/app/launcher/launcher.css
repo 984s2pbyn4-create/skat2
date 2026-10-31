@@ -1,0 +1,61 @@
+.l-wrap {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+.l-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.l-head img {
+  border-radius: 14px;
+}
+.l-head h1 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: 0.02em;
+}
+.l-head p {
+  margin: 2px 0 0;
+  font-family: var(--font-num);
+}
+.l-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.l-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-height: 120px;
+  padding: 18px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+.l-tile:not(:disabled):hover,
+.l-tile:not(:disabled):active {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.l-tile:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.l-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.l-sum {
+  color: var(--muted);
+}

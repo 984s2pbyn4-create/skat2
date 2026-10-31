@@ -9,6 +9,7 @@
   - «Файлы: …»;
   - ссылки: стабильная `https://984s2pbyn4-create.github.io/skat2/`, бета `…/skat2/beta/`, релизы `https://github.com/984s2pbyn4-create/skat2/releases`.
 - Код правит только один чат одновременно.
+- Ветки: код — в `dev`; `main` — стабильная версия и приём архивов. Workflow-файлы живут в `main`, их создаёт пользователь вручную.
 
 ## Начало чата
 1. Получить код: `git clone --depth 1 -b dev https://github.com/984s2pbyn4-create/skat2` (репозиторий публичный).
@@ -34,10 +35,11 @@
 5. Обновить статус в `FEATURES.md` и `README.md` функции.
 6. Собрать архив `skat2-<версия>.zip`:
    - только изменённые и новые файлы, с путями от корня;
-   - удаления — списком в `_delete.txt`.
+   - удаления — списком в `_delete.txt`;
+   - сообщение коммита — в `_commit.txt` (Conventional Commits).
 
    Положить в `/mnt/user-data/outputs/` → `present_files`.
-7. Пользователь загружает архив в папку `inbox/` (Add file → Upload files) → Action `apply-patch` проверяет и коммитит в `dev` → бета обновляется.
+7. Пользователь загружает архив в корень ветки `main` (Add file → Upload files → Commit) → Action `apply-patch` проверяет и коммитит в `dev` → бета обновляется. Красный крестик в Actions — архив не применён, нужен лог.
 8. Выпуск стабильной версии: пользователь нажимает «Run workflow» у `release.yml`.
 
 ## Правила кода

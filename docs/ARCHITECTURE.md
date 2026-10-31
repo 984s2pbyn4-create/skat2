@@ -158,7 +158,7 @@ interface LayerPacket { v: 1; id: string; from: { mode: Mode; project: string; a
 
 ```
 skat2/
-├─ .github/workflows/  ci.yml · pages.yml · android.yml · windows.yml · apply-patch.yml · release.yml
+├─ .github/workflows/  apply-patch.yml · pages.yml · release.yml · android.yml · windows.yml
 ├─ docs/               ARCHITECTURE.md · FEATURES.md · adr/
 ├─ inbox/              сюда загружается архив с изменениями
 ├─ platforms/android/  Capacitor: конфиг, иконки, разрешения
@@ -204,7 +204,7 @@ skat2/
   - `main` → стабильная: `…/skat2/`.
 
   Обе публикует `pages.yml` одним сайтом.
-- **apply-patch.yml:** архив из `inbox/` → распаковка, удаление файлов по `_delete.txt`, все проверки → коммит в `dev` → бета.
+- **apply-patch.yml:** архив `skat2-*.zip` (корень `main` или `inbox/`) → распаковка, удаление по `_delete.txt`, сообщение из `_commit.txt`, все проверки → коммит в `dev` → бета. Отдельного `ci.yml` нет: проверки выполняются здесь.
 - **release.yml** (кнопка «Run workflow» с iPhone):
   1. слияние `dev` → `main`, тег `v2.x.y`;
   2. сборка APK и EXE → GitHub Releases. Там файлы не истекают.
