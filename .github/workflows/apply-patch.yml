@@ -1,0 +1,100 @@
+# Применяет архив skat2-*.zip (корень main или inbox/) к ветке dev:
+# удаления по _delete.txt, сообщение из _commit.txt, все проверки, коммит, публикация беты.
+# Файл создаётся вручную: Action не может менять workflow-файлы.
+name: apply-patch
+
+on:
+  push:
+    paths:
+      - 'skat2-*.zip'
+      - 'inbox/*.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: apply-patch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Забрать архив
+        run: |
+          set -euo pipefail
+          git config user.name "skat2-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mapfile -t ZIPS < <(git ls-files -- 'skat2-*.zip' 'inbox/*.zip' | sort -V)
+          if [ ${#ZIPS[@]} -eq 0 ]; then echo "::error::Архив skat2-*.zip не найден"; exit 1; fi
+          mkdir -p /tmp/in
+          for z in "${ZIPS[@]}"; do cp "$z" /tmp/in/; git rm -q -- "$z"; done
+          git commit -qm "chore: архив принят (${ZIPS[*]})"
+          git push -q origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Перейти на dev
+        run: |
+          set -euo pipefail
+          git fetch -q origin
+          if ! git show-ref -q --verify refs/remotes/origin/dev; then
+            echo "::error::Нет ветки dev. Создайте её из main: меню веток → dev → Create branch."
+            exit 1
+          fi
+          git checkout -q -B dev origin/dev
+
+      - name: Распаковать и применить
+        run: |
+          set -euo pipefail
+          : > /tmp/msg.txt
+          for z in $(ls /tmp/in/*.zip | sort -V); do
+            rm -rf /tmp/p && mkdir /tmp/p && unzip -q "$z" -d /tmp/p
+            if [ -d /tmp/p/.github/workflows ]; then
+              echo "::warning::Файлы workflow в архиве пропущены — их создают вручную"
+              rm -rf /tmp/p/.github/workflows
+            fi
+            if [ -f /tmp/p/_delete.txt ]; then
+              while IFS= read -r f || [ -n "$f" ]; do
+                f="${f%$'\r'}"; [ -z "$f" ] && continue
+                git rm -rq --ignore-unmatch -- "$f"
+              done < /tmp/p/_delete.txt
+              rm /tmp/p/_delete.txt
+            fi
+            if [ -f /tmp/p/_commit.txt ]; then cat /tmp/p/_commit.txt >> /tmp/msg.txt; echo >> /tmp/msg.txt; rm /tmp/p/_commit.txt; fi
+            cp -a /tmp/p/. .
+          done
+          [ -s /tmp/msg.txt ] || echo "chore: изменения из архива" > /tmp/msg.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Проверки и сборка
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
+          npm run build
+
+      - name: Коммит в dev
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then echo "Изменений нет"; exit 0; fi
+          git commit -q -F /tmp/msg.txt
+          git push -q origin dev
+          { echo "### Применено в dev"; git log -1 --format='%s'; } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: apply
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
