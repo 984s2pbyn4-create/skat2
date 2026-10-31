@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070b08">
+<title>СКАТ 2.0 · стенд M0</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.19.0/dist/maplibre-gl.css" onerror="this.onerror=null;this.href='https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.css'">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;600&display=swap">
+<style>
+:root{--bg:#070b08;--pn:rgba(8,14,10,.94);--ln:#1e3326;--tx:#d3e4d7;--mu:#7f9886;--ac:#5cff9a;--ac2:#163f28;--wr:#ffb347;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font:14px/1.35 "IBM Plex Sans Condensed","Roboto Condensed",system-ui,sans-serif}
+#map{position:fixed;inset:0}
+#hud,#coord{position:fixed;left:50%;transform:translateX(-50%);z-index:5;background:var(--pn);border:1px solid var(--ln);border-radius:8px;padding:4px 10px;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums;max-width:calc(100vw - 120px);overflow:hidden;text-overflow:ellipsis}
+#hud{top:calc(env(safe-area-inset-top,0px) + 8px)}
+#coord{top:calc(env(safe-area-inset-top,0px) + 40px);display:none;cursor:pointer}
+#hud b,#coord b{color:var(--ac);font-weight:600}
+#hud .w{color:var(--wr)}
+#tog{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:calc(env(safe-area-inset-right,0px) + 8px);z-index:7}
+#pnl{position:fixed;z-index:6;background:var(--pn);border:1px solid var(--ln);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+@media (min-width:760px){#pnl{top:calc(env(safe-area-inset-top,0px) + 52px);right:8px;bottom:8px;width:350px;border-radius:10px}}
+@media (max-width:759px){#pnl{left:0;right:0;bottom:0;max-height:56vh;border-radius:14px 14px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}}
+#pnl.hid{display:none}
+#pnl header{padding:10px 12px;font-size:13px;color:var(--mu)}
+#pnl header b{color:var(--tx);font-size:15px}
+section{padding:10px 12px;border-top:1px solid var(--ln)}
+h3{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--ac)}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
+button,select,input[type=number],.btn{font:inherit;color:var(--tx);background:#0f1f16;border:1px solid var(--ln);border-radius:7px;padding:6px 11px;min-height:36px;cursor:pointer}
+input[type=number]{width:64px}
+button:active,.btn:active{background:var(--ac2)}
+button:disabled{opacity:.45}
+.pri{background:var(--ac2);border-color:var(--ac);color:#eafff1}
+.chk{display:flex;gap:8px;align-items:center;margin:6px 0;min-height:30px}
+.chk input{width:18px;height:18px;accent-color:var(--ac)}
+.note{color:var(--mu);font-size:12px;margin:4px 0 0}
+pre{white-space:pre-wrap;word-break:break-word;font:11px/1.35 ui-monospace,Menlo,Consolas,monospace;background:#040705;border:1px solid var(--ln);border-radius:6px;padding:8px;max-height:240px;overflow:auto;user-select:text;-webkit-user-select:text;margin:4px 0 8px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 20px);z-index:9;background:#0d2a1a;border:1px solid var(--ac);color:#eafff1;border-radius:9px;padding:8px 14px;font-size:13px;max-width:90vw;display:none}
+#boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mu);z-index:1}
+.maplibregl-ctrl-top-left{top:env(safe-area-inset-top,0px);left:env(safe-area-inset-left,0px)}
+</style>
+</head>
+<body>
+<div id="boot">Загрузка движка…</div>
+<div id="map"></div>
+<div id="hud">…</div>
+<div id="coord" title="Скрыть"></div>
+<button id="tog" class="pri">Панель</button>
+<aside id="pnl">
+<header><b>СКАТ 2.0</b> · стенд проверки движка <span id="ver"></span><br>Пройдите проверки, затем «Копировать отчёт» и пришлите текст в чат.</header>
+<section><h3>Подложка</h3>
+<div class="row"><select id="base"></select><label class="btn">Открыть .mbtiles<input type="file" id="mbf" hidden></label></div>
+<p class="note" id="baseNote">Яндекс в проекции 3395 пересчитывается в 3857 на лету.</p></section>
+<section><h3>Знаки</h3>
+<div class="row"><button data-n="500">500</button><button data-n="2000" class="pri">2000</button><button data-n="5000">5000</button><button data-n="0">Убрать</button></div>
+<label class="chk"><input type="checkbox" id="lbl" checked>Подписи номеров (с z 11)</label>
+<div class="row"><button id="tFly">Облёт 6 с</button><button id="tMove">Движение всех 4 с</button></div>
+<p class="note">Знак можно перетащить. Поворот и наклон: двумя пальцами или правой кнопкой мыши.</p></section>
+<section><h3>Сетка СК-42</h3>
+<label class="chk"><input type="checkbox" id="grid" checked>Километровая сетка</label>
+<p class="note" id="gridNote">Нажмите на карту: появятся координаты X, Y.</p></section>
+<section><h3>Офлайн</h3>
+<label class="chk"><input type="checkbox" id="off">Без сети (только кэш)</label>
+<div class="row">Скачать область до z <input type="number" id="dlz" min="1" max="19" value="16"><button id="dl">Скачать</button></div>
+<p class="note" id="dlNote"></p>
+<div class="row"><button id="cst">Состояние кэша</button><button id="ccl">Очистить кэш</button></div>
+<p class="note" id="cacheNote"></p></section>
+<section><h3>Печать</h3>
+<div class="row"><select id="pf"><option>A4</option><option>A3</option></select><select id="po"><option value="l">альбомная</option><option value="p">книжная</option></select></div>
+<div class="row"><select id="ps"><option value="25000">1:25 000</option><option value="50000" selected>1:50 000</option><option value="100000">1:100 000</option><option value="200000">1:200 000</option></select><select id="pd"><option>150</option><option>200</option><option selected>300</option></select>dpi</div>
+<div class="row"><button id="pPng">PNG</button><button id="pPdf">PDF</button></div>
+<p class="note" id="pNote">Центр листа — центр экрана, север вверх.</p></section>
+<section><h3>Отчёт</h3><pre id="rep"></pre>
+<div class="row"><button id="copy" class="pri">Копировать отчёт</button><button id="rst">Сбросить</button></div></section>
+</aside>
+<div id="toast"></div>
+<script>
+'use strict';
+const STAND = 'M0.1';
+const ML_V = '5.19.0';
+const ML_JS = ['https://cdn.jsdelivr.net/npm/maplibre-gl@' + ML_V + '/dist/maplibre-gl.js', 'https://unpkg.com/maplibre-gl@' + ML_V + '/dist/maplibre-gl.js', 'https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.js'];
+const SQL_BASE = 'https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/';
+const JSPDF = ['https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'];
+const GLYPHS = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+const FONT = ['Open Sans Semibold'];
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const $ = id => document.getElementById(id);
+const EMPTYFC = {type: 'FeatureCollection', features: []};
+let map = null, CUR = 'osm', OFF = false, BUSY = false, MBMETA = null, EMPTY = null, GLI = {}, MLV = '';
+let FC = {type: 'FeatureCollection', features: []};
+const ST = {hit: 0, net: 0, over: 0, miss: 0, err: 0};
+const NETBAD = new Set();
+const ERR = [];
+
+// ---------- отчёт ----------
+const R = (() => { try { return JSON.parse(localStorage.getItem('skat2m0_rep') || '{}'); } catch (e) { return {}; } })();
+function rec(k, v) { R[k] = v; try { localStorage.setItem('skat2m0_rep', JSON.stringify(R)); } catch (e) {} renderRep(); }
+function renderRep() {
+  const g = GLI;
+  const L = ['СКАТ 2.0 · стенд ' + STAND + ' · ' + new Date().toLocaleString('ru-RU'),
+    'Браузер: ' + navigator.userAgent,
+    'Экран: ' + screen.width + '×' + screen.height + ' @' + devicePixelRatio + ', ядер ' + (navigator.hardwareConcurrency || '?') + ', память ' + (navigator.deviceMemory || '?') + ' ГБ',
+    'WebGL' + (g.v || '?') + ': ' + (g.ren || '?') + '; текстура ≤' + g.maxTex + ', буфер ≤' + g.maxRb,
+    'MapLibre ' + (MLV || '?')];
+  for (const k in R) L.push(k + ': ' + R[k]);
+  if (ERR.length) L.push('Ошибки: ' + ERR.join(' | '));
+  $('rep').textContent = L.join('\n');
+}
+function toast(t, ms) {
+  const el = $('toast'); el.textContent = t; el.style.display = 'block';
+  clearTimeout(toast.t); toast.t = setTimeout(() => { el.style.display = 'none'; }, ms || 2600);
+}
+function err(m) { ERR.push(String(m).slice(0, 140)); if (ERR.length > 8) ERR.shift(); renderRep(); }
+addEventListener('error', e => err(e.message));
+addEventListener('unhandledrejection', e => err(e.reason && e.reason.message || e.reason));
+const avg = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0;
+const fmtN = v => Math.round(v).toLocaleString('ru-RU');
+function frameStats(fr) {
+  const f = fr.slice(2).sort((a, b) => a - b);
+  if (!f.length) return 'нет кадров';
+  const a = avg(f), p95 = f[Math.floor(f.length * 0.95)], mx = f[f.length - 1];
+  return (1000 / a).toFixed(0) + ' к/с, p95 ' + p95.toFixed(0) + ' мс, худший ' + mx.toFixed(0) + ' мс, рывков >50 мс: ' + f.filter(x => x > 50).length;
+}
+
+// ---------- загрузка скриптов ----------
+function loadScript(urls, ok) {
+  return urls.reduce((p, u) => p.catch(() => new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = u;
+    s.onload = () => (ok() ? res(u) : rej(new Error('пусто')));
+    s.onerror = () => rej(new Error('не загрузился ' + u));
+    document.head.appendChild(s);
+  })), Promise.reject(new Error('старт')));
+}
+
+// ---------- СК-42 (перенесено из 6.x без изменений) ----------
+function geoLib(){
+const D2R = Math.PI/180, S2R = Math.PI/(180*3600);
+const WGS = {a:6378137, f:1/298.257223563}, KRS = {a:6378245, f:1/298.3};
+[WGS,KRS].forEach(e=>{e.e2=e.f*(2-e.f); e.ep2=e.e2/(1-e.e2);});
+const T = {dx:23.57, dy:-140.95, dz:-79.8, rx:0*S2R, ry:0.35*S2R, rz:0.79*S2R, s:-0.22e-6};
+function toEcef(lat,lon,h,E){const p=lat*D2R,l=lon*D2R,sp=Math.sin(p),N=E.a/Math.sqrt(1-E.e2*sp*sp);
+return [(N+h)*Math.cos(p)*Math.cos(l),(N+h)*Math.cos(p)*Math.sin(l),(N*(1-E.e2)+h)*sp];}
+function fromEcef(X,Y,Z,E){const p=Math.hypot(X,Y),lon=Math.atan2(Y,X);let lat=Math.atan2(Z,p*(1-E.e2)),h=0;
+for(let i=0;i<6;i++){const s=Math.sin(lat),N=E.a/Math.sqrt(1-E.e2*s*s);h=p/Math.cos(lat)-N;lat=Math.atan2(Z,p*(1-E.e2*N/(N+h)));}
+return [lat/D2R,lon/D2R,h];}
+function wgsToKrs(lat,lon){const [X,Y,Z]=toEcef(lat,lon,0,WGS);const k=1+T.s;
+const x=(X-T.dx)/k,y=(Y-T.dy)/k,z=(Z-T.dz)/k;
+return fromEcef(x+T.rz*y-T.ry*z, -T.rz*x+y+T.rx*z, T.ry*x-T.rx*y+z, KRS);}
+function krsToWgs(lat,lon){const [x,y,z]=toEcef(lat,lon,0,KRS);const k=1+T.s;
+return fromEcef(T.dx+k*(x-T.rz*y+T.ry*z), T.dy+k*(T.rz*x+y-T.rx*z), T.dz+k*(-T.ry*x+T.rx*y+z), WGS);}
+const E=KRS, e2=E.e2, ep2=E.ep2, a=E.a, e4=e2*e2, e6=e4*e2;
+const M0=1-e2/4-3*e4/64-5*e6/256, M2=3*e2/8+3*e4/32+45*e6/1024, M4=15*e4/256+45*e6/1024, M6=35*e6/3072;
+const e1=(1-Math.sqrt(1-e2))/(1+Math.sqrt(1-e2));
+function tmFwd(lat,lon,L0){const p=lat*D2R,sp=Math.sin(p),cp=Math.cos(p),tp=Math.tan(p);
+const N=a/Math.sqrt(1-e2*sp*sp),Tt=tp*tp,C=ep2*cp*cp,A=(lon-L0)*D2R*cp;
+const M=a*(M0*p-M2*Math.sin(2*p)+M4*Math.sin(4*p)-M6*Math.sin(6*p));
+const east=N*(A+(1-Tt+C)*A**3/6+(5-18*Tt+Tt*Tt+72*C-58*ep2)*A**5/120);
+const north=M+N*tp*(A*A/2+(5-Tt+9*C+4*C*C)*A**4/24+(61-58*Tt+Tt*Tt+600*C-330*ep2)*A**6/720);
+return [north,east];}
+function tmInv(north,east,L0){const mu=north/(a*M0);
+const p1=mu+(3*e1/2-27*e1**3/32)*Math.sin(2*mu)+(21*e1*e1/16-55*e1**4/32)*Math.sin(4*mu)+(151*e1**3/96)*Math.sin(6*mu)+(1097*e1**4/512)*Math.sin(8*mu);
+const s=Math.sin(p1),c=Math.cos(p1),t=Math.tan(p1),C1=ep2*c*c,T1=t*t,N1=a/Math.sqrt(1-e2*s*s),R1=a*(1-e2)/Math.pow(1-e2*s*s,1.5),D=east/N1;
+const lat=p1-(N1*t/R1)*(D*D/2-(5+3*T1+10*C1-4*C1*C1-9*ep2)*D**4/24+(61+90*T1+298*C1+45*T1*T1-252*ep2-3*C1*C1)*D**6/720);
+const lon=L0*D2R+(D-(1+2*T1+C1)*D**3/6+(5-2*C1+28*T1-3*C1*C1+8*ep2+24*T1*T1)*D**5/120)/c;
+return [lat/D2R,lon/D2R];}
+function zoneOf(lon){return Math.floor(((lon%360)+360)%360/6)+1;}
+function toSK(lat,lon,zone){const [bl,ll]=wgsToKrs(lat,lon);const z=zone||zoneOf(ll);
+const [n,e]=tmFwd(bl,ll,6*z-3);return {x:n,y:z*1e6+500000+e,zone:z};}
+function fromSK(x,y,zone){const z=zone||Math.floor(y/1e6);const [bl,ll]=tmInv(x,y-z*1e6-500000,6*z-3);
+const [la,lo]=krsToWgs(bl,ll);return [la,lo];}
+return {toSK,fromSK,zoneOf,wgsToKrs,krsToWgs};
+}
+const GEO = geoLib();
+
+// ---------- Worker: .mbtiles (sql.js) и сетка СК-42 ----------
+function workerMain(cfg) {
+  var GEO = geoLib(), SQL = null, db = null, st = null, xyz = false;
+  function km2(v) { var k = Math.round(v / 1000); return String(((k % 100) + 100) % 100).padStart(2, '0'); }
+  function grid(q) {
+    var feats = [], step = q.step, N = 24, lines = 0, maxL = q.max || 500, zones = [];
+    var za = GEO.zoneOf(q.w), zb = GEO.zoneOf(q.e - 1e-9);
+    for (var z = za; z <= zb; z++) {
+      var lo0 = Math.max(q.w, 6 * (z - 1)), lo1 = Math.min(q.e, 6 * z);
+      if (lo1 <= lo0) continue;
+      var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (var i = 0; i <= 8; i++) for (var j = 0; j <= 8; j++) {
+        var p = GEO.toSK(q.s + (q.n - q.s) * j / 8, lo0 + (lo1 - lo0) * i / 8, z);
+        if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x; if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y;
+      }
+      zones.push({z: z, lo0: lo0, lo1: lo1, x0: x0, x1: x1, y0: y0, y1: y1});
+    }
+    var est = function (s) { return zones.reduce(function (a, o) { return a + (o.x1 - o.x0) / s + (o.y1 - o.y0) / s; }, 0); };
+    while (est(step) > maxL) step *= 2;
+    zones.forEach(function (o) {
+      function push(pts, props) {
+        var run = [];
+        for (var i = 0; i < pts.length; i++) {
+          var lo = pts[i][0];
+          if (lo >= o.lo0 - 1e-9 && lo <= o.lo1 + 1e-9) run.push(pts[i]);
+          else { if (run.length > 1) feats.push({type: 'Feature', geometry: {type: 'LineString', coordinates: run}, properties: props}); run = []; }
+        }
+        if (run.length > 1) feats.push({type: 'Feature', geometry: {type: 'LineString', coordinates: run}, properties: props});
+      }
+      var X, Y, k, ll, pts;
+      for (X = Math.ceil(o.x0 / step) * step; X <= o.x1; X += step) {
+        pts = []; for (k = 0; k <= N; k++) { ll = GEO.fromSK(X, o.y0 + (o.y1 - o.y0) * k / N, o.z); pts.push([ll[1], ll[0]]); }
+        push(pts, {k: km2(X)}); lines++;
+      }
+      for (Y = Math.ceil(o.y0 / step) * step; Y <= o.y1; Y += step) {
+        pts = []; for (k = 0; k <= N; k++) { ll = GEO.fromSK(o.x0 + (o.x1 - o.x0) * k / N, Y, o.z); pts.push([ll[1], ll[0]]); }
+        push(pts, {k: km2(Y)}); lines++;
+      }
+    });
+    for (var m = Math.ceil(q.w / 6) * 6; m < q.e; m += 6) feats.push({type: 'Feature', geometry: {type: 'LineString', coordinates: [[m, q.s], [m, q.n]]}, properties: {zb: 1}});
+    return {fc: {type: 'FeatureCollection', features: feats}, n: lines, step: step};
+  }
+  function sniff(u) {
+    if (!u || u.length < 4) return '';
+    if (u[0] === 0x89 && u[1] === 0x50) return 'png';
+    if (u[0] === 0xFF && u[1] === 0xD8) return 'jpg';
+    if (u[0] === 0x52 && u[1] === 0x49) return 'webp';
+    if (u[0] === 0x1F && u[1] === 0x8B) return 'pbf';
+    return '';
+  }
+  self.onmessage = async function (e) {
+    var d = e.data, id = d.id;
+    try {
+      if (d.cmd === 'grid') { self.postMessage({id: id, r: grid(d.a)}); return; }
+      if (d.cmd === 'open') {
+        var t0 = Date.now();
+        if (!SQL) { importScripts(cfg.sql + 'sql-wasm.js'); SQL = await initSqlJs({locateFile: function (f) { return cfg.sql + f; }}); }
+        var tSql = Date.now() - t0;
+        if (st) { st.free(); st = null; }
+        if (db) { db.close(); db = null; }
+        var buf = new Uint8Array(await d.a.arrayBuffer());
+        var tRead = Date.now() - t0 - tSql;
+        db = new SQL.Database(buf);
+        var meta = {}, r = db.exec('SELECT name, value FROM metadata');
+        if (r[0]) r[0].values.forEach(function (v) { meta[v[0]] = v[1]; });
+        if (meta.minzoom == null || meta.maxzoom == null) {
+          var mm = db.exec('SELECT MIN(zoom_level), MAX(zoom_level) FROM tiles');
+          if (mm[0]) { meta.minzoom = mm[0].values[0][0]; meta.maxzoom = mm[0].values[0][1]; }
+        }
+        if (!meta.format) { var ft = db.exec('SELECT tile_data FROM tiles LIMIT 1'); meta.format = ft[0] ? sniff(ft[0].values[0][0]) : ''; }
+        xyz = meta.scheme === 'xyz';
+        st = db.prepare('SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?');
+        meta._ms = {sql: tSql, read: tRead, open: Date.now() - t0 - tSql - tRead};
+        self.postMessage({id: id, r: meta}); return;
+      }
+      if (d.cmd === 'tile') {
+        if (!st) { self.postMessage({id: id, r: null}); return; }
+        var z = d.a[0], x = d.a[1], y = d.a[2];
+        st.bind([z, x, xyz ? y : ((1 << z) - 1 - y)]);
+        var out = null;
+        if (st.step()) { var b = st.get()[0]; if (b && b.length) out = b.slice().buffer; }
+        st.reset();
+        self.postMessage({id: id, r: out}, out ? [out] : []); return;
+      }
+      throw new Error('нет команды ' + d.cmd);
+    } catch (er) { self.postMessage({id: id, err: String(er && er.message || er)}); }
+  };
+}
+const W = {
+  w: null, id: 0, cb: new Map(),
+  init() {
+    const src = geoLib.toString() + ';\n(' + workerMain.toString() + ')(' + JSON.stringify({sql: SQL_BASE}) + ');';
+    this.w = new Worker(URL.createObjectURL(new Blob([src], {type: 'text/javascript'})));
+    this.w.onmessage = e => { const d = e.data, c = this.cb.get(d.id); if (!c) return; this.cb.delete(d.id); d.err ? c.rej(new Error(d.err)) : c.res(d.r); };
+    this.w.onerror = e => err('Worker: ' + e.message);
+  },
+  call(cmd, a, tr) { return new Promise((res, rej) => { const id = ++this.id; this.cb.set(id, {res, rej}); this.w.postMessage({id, cmd, a}, tr || []); }); }
+};
+
+// ---------- кэш тайлов: IndexedDB ----------
+let dbp = null;
+function idb() {
+  return dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open('skat2-m0', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('t');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+}
+const PEND = new Map(); let putT = 0;
+async function cacheGet(k) {
+  if (PEND.has(k)) return PEND.get(k).slice(0);
+  try {
+    const d = await idb();
+    return await new Promise(res => { const q = d.transaction('t').objectStore('t').get(k); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); });
+  } catch (e) { return null; }
+}
+function cachePut(k, b) { PEND.set(k, b); if (!putT) putT = setTimeout(flush, 600); }
+async function flush() {
+  putT = 0; const items = [...PEND]; if (!items.length) return;
+  try {
+    const d = await idb();
+    await new Promise(res => {
+      const tx = d.transaction('t', 'readwrite'), s = tx.objectStore('t');
+      items.forEach(([k, v]) => s.put(v, k));
+      tx.oncomplete = res; tx.onerror = tx.onabort = () => { rec('Ошибка кэша', String(tx.error)); res(); };
+    });
+  } catch (e) { err('кэш: ' + e.message); }
+  items.forEach(([k]) => PEND.delete(k));
+}
+async function cacheStat() {
+  await flush();
+  const d = await idb();
+  const n = await new Promise(res => { const q = d.transaction('t').objectStore('t').count(); q.onsuccess = () => res(q.result); q.onerror = () => res(-1); });
+  let est = '';
+  if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); est = ', занято ' + (e.usage / 1048576).toFixed(1) + ' МБ из ' + (e.quota / 1048576 / 1024).toFixed(1) + ' ГБ'; }
+  const per = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : '?';
+  return 'тайлов ' + n + est + ', защита от очистки: ' + (per === true ? 'да' : per === false ? 'нет' : '?');
+}
+
+// ---------- подложки и протокол skat:// ----------
+const YA = 'https://core-renderer-tiles.maps.yandex.net/tiles?l=';
+const BASES = {
+  osm: {n: 'OpenStreetMap', u: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', max: 19, a: '© OpenStreetMap'},
+  topo: {n: 'Топокарта OTM', u: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', s: 'abc', max: 17, a: '© OpenStreetMap, SRTM, © OpenTopoMap'},
+  esri: {n: 'Спутник Esri', u: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', max: 19, a: '© Esri'},
+  esrit: {n: 'Esri топо', u: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', max: 19, a: '© Esri'},
+  ya_map: {n: 'Яндекс схема (3395)', u: YA + 'map&x={x}&y={y}&z={z}&scale=1&lang=ru_RU', max: 19, m3395: 1, a: '© Яндекс'},
+  ya_sat: {n: 'Яндекс спутник (3395)', u: 'https://core-sat.maps.yandex.net/tiles?l=sat&v=3.1025.0&x={x}&y={y}&z={z}&scale=1&lang=ru_RU', max: 19, m3395: 1, a: '© Яндекс'}
+};
+function tileUrl(B, z, x, y) {
+  return B.u.replace('{z}', z).replace('{x}', x).replace('{y}', y).replace('{s}', B.s ? B.s[(x + y) % B.s.length] : '');
+}
+function canvas256() {
+  if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(256, 256);
+  const c = document.createElement('canvas'); c.width = c.height = 256; return c;
+}
+async function canvasBuf(c, type) {
+  const t = type || 'image/png';
+  const b = c.convertToBlob ? await c.convertToBlob({type: t}) : await new Promise(r => c.toBlob(r, t));
+  return b.arrayBuffer();
+}
+async function rawTile(base, z, x, y, signal) {
+  const key = base + '/' + z + '/' + x + '/' + y;
+  const c = await cacheGet(key);
+  if (c) { ST.hit++; return c; }
+  if (OFF || NETBAD.has(base)) { ST.miss++; return null; }
+  const B = BASES[base], tag = 'Сеть: ' + B.n;
+  let r;
+  try { r = await fetch(tileUrl(B, z, x, y), {mode: 'cors', signal}); }
+  catch (e) {
+    if (e.name === 'AbortError') throw e;
+    ST.err++;
+    if (navigator.onLine !== false) { NETBAD.add(base); rec(tag, 'запрос отклонён (вероятно, нет CORS) — в вебе недоступна, в APK/EXE пойдёт нативный запрос'); toast(B.n + ': браузер не даёт загрузить тайлы (CORS)', 4000); }
+    return null;
+  }
+  if (!r.ok) { ST.err++; return null; }
+  const b = await r.arrayBuffer();
+  if (!b.byteLength) return null;
+  if (!R[tag]) rec(tag, 'CORS есть, тайлы грузятся и кэшируются');
+  cachePut(key, b.slice(0)); ST.net++;
+  return b;
+}
+// Яндекс (эллипсоидная Меркатор 3395) → тайл 3857: построчный пересчёт по широте
+const E_WGS = 0.0818191908426215;
+const lat3857 = (py, S) => Math.atan(Math.sinh(Math.PI * (1 - 2 * py / S)));
+function y3395(phi, S) {
+  const es = E_WGS * Math.sin(phi);
+  return S * (0.5 - Math.log(Math.tan(Math.PI / 4 + phi / 2) * Math.pow((1 - es) / (1 + es), E_WGS / 2)) / (2 * Math.PI));
+}
+async function compose3395(base, z, x, y, signal) {
+  const n = 2 ** z, S = 256 * n, ys = [];
+  for (let r = 0; r < 256; r++) ys.push(y3395(lat3857(y * 256 + r + 0.5, S), S));
+  const t0 = Math.max(0, Math.floor(ys[0] / 256)), t1 = Math.min(n - 1, Math.floor(ys[255] / 256));
+  const rows = [];
+  for (let t = t0; t <= t1; t++) rows.push(t);
+  const bufs = await Promise.all(rows.map(t => rawTile(base, z, x, t, signal)));
+  if (bufs.some(b => !b)) return null;
+  const bm = {};
+  for (let i = 0; i < rows.length; i++) bm[rows[i]] = await createImageBitmap(new Blob([bufs[i]]));
+  const c = canvas256(), g = c.getContext('2d');
+  for (let r = 0; r < 256; r++) {
+    const t = Math.floor(ys[r] / 256), b = bm[t];
+    if (b) g.drawImage(b, 0, Math.min(255, Math.floor(ys[r] - t * 256)), 256, 1, 0, r, 256, 1);
+  }
+  Object.values(bm).forEach(b => b.close && b.close());
+  return canvasBuf(c, base === 'ya_sat' ? 'image/jpeg' : 'image/png');
+}
+function ownTile(base, z, x, y, signal) { return BASES[base].m3395 ? compose3395(base, z, x, y, signal) : rawTile(base, z, x, y, signal); }
+// нет тайла (нет сети, заглушка поставщика) → увеличенный родительский
+async function getTile(base, z, x, y, signal, d) {
+  let b = null;
+  try { b = await ownTile(base, z, x, y, signal); } catch (e) { if (e.name === 'AbortError') throw e; err('тайл: ' + e.message); }
+  if (b) return b;
+  if (d >= 6 || z === 0) return null;
+  const p = await getTile(base, z - 1, x >> 1, y >> 1, signal, d + 1);
+  if (!p) return null;
+  ST.over++;
+  const bm = await createImageBitmap(new Blob([p]));
+  const c = canvas256();
+  c.getContext('2d').drawImage(bm, (x & 1) * 128, (y & 1) * 128, 128, 128, 0, 0, 256, 256);
+  if (bm.close) bm.close();
+  return canvasBuf(c);
+}
+
+// ---------- знаки: SVG → спрайты ----------
+const KINDS = ['tank', 'ifv', 'art', 'mlrs', 'op', 'atgm'];
+const SIDE = {r: '#ff3b30', b: '#2f8bff'};
+function symSvg(k, c) {
+  const P = {
+    tank: w => '<rect x="8" y="10" width="48" height="20" rx="10" ' + w + '/>',
+    ifv: w => '<rect x="6" y="6" width="52" height="28" ' + w + '/><rect x="17" y="13" width="30" height="14" rx="7" ' + w + '/>',
+    art: w => '<circle cx="28" cy="20" r="11" ' + w + '/><line x1="39" y1="20" x2="60" y2="20" ' + w + '/>',
+    mlrs: w => '<rect x="6" y="8" width="52" height="24" ' + w + '/><path d="M16 27 L24 13 M28 27 L36 13 M40 27 L48 13" ' + w + '/>',
+    op: w => '<path d="M32 4 L58 36 L6 36 Z" ' + w + '/>',
+    atgm: w => '<path d="M8 33 L32 9 L56 33 M32 9 L32 37" ' + w + '/>'
+  }[k];
+  const halo = 'fill="none" stroke="#000" stroke-opacity=".55" stroke-width="6.5" stroke-linejoin="round" stroke-linecap="round"';
+  const main = 'fill="none" stroke="' + c + '" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"';
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="80" viewBox="0 0 64 40">' + P(halo) + P(main) + '</svg>';
+}
+let SPR = null;
+async function buildSprites() {
+  if (SPR) return SPR;
+  const t0 = performance.now(), out = [];
+  for (const k of KINDS) for (const s in SIDE) {
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(symSvg(k, SIDE[s]));
+    await img.decode();
+    const c = document.createElement('canvas'); c.width = 128; c.height = 80;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0, 128, 80);
+    out.push({id: k + '_' + s, data: g.getImageData(0, 0, 128, 80)});
+  }
+  SPR = out;
+  rec('Спрайты SVG→карта', out.length + ' шт за ' + (performance.now() - t0).toFixed(0) + ' мс');
+  return SPR;
+}
+function addSprites(m) { SPR.forEach(s => { if (!m.hasImage(s.id)) m.addImage(s.id, s.data, {pixelRatio: 2}); }); }
+
+// ---------- стиль карты ----------
+function baseSource(k) {
+  if (k === 'mbt') {
+    const m = MBMETA, s = {type: 'raster', tiles: ['mbt://{z}/{x}/{y}'], tileSize: 256, minzoom: +m.minzoom || 0, maxzoom: +m.maxzoom || 18};
+    const bb = String(m.bounds || '').split(',').map(Number);
+    if (bb.length === 4 && bb.every(isFinite)) s.bounds = bb;
+    return s;
+  }
+  const B = BASES[k];
+  return {type: 'raster', tiles: ['skat://' + k + '/{z}/{x}/{y}'], tileSize: 256, maxzoom: B.max, attribution: B.a};
+}
+function makeStyle(k, bg) {
+  return {version: 8, glyphs: GLYPHS,
+    sources: {base: baseSource(k), grid: {type: 'geojson', data: EMPTYFC}, sym: {type: 'geojson', data: FC}},
+    layers: [
+      {id: 'bg', type: 'background', paint: {'background-color': bg || '#c9d0c6'}},
+      {id: 'base', type: 'raster', source: 'base'},
+      {id: 'grid-l', type: 'line', source: 'grid', filter: ['!', ['has', 'zb']], paint: {'line-color': '#d4322c', 'line-width': 1, 'line-opacity': 0.85}},
+      {id: 'grid-z', type: 'line', source: 'grid', filter: ['has', 'zb'], paint: {'line-color': '#d4322c', 'line-width': 2, 'line-dasharray': [4, 3]}},
+      {id: 'grid-t', type: 'symbol', source: 'grid', filter: ['has', 'k'], layout: {'symbol-placement': 'line', 'symbol-spacing': 280, 'text-field': ['get', 'k'], 'text-font': FONT, 'text-size': 12}, paint: {'text-color': '#b0201b', 'text-halo-color': '#fff', 'text-halo-width': 1.5}},
+      {id: 'sym-i', type: 'symbol', source: 'sym', layout: {'icon-image': ['get', 's'], 'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.45, 13, 0.8, 17, 1.3], 'icon-allow-overlap': true, 'icon-ignore-placement': true}},
+      {id: 'sym-l', type: 'symbol', source: 'sym', minzoom: 11, layout: {'text-field': ['get', 'l'], 'text-font': FONT, 'text-size': 11, 'text-offset': [0, 1.4], 'text-anchor': 'top', 'visibility': $('lbl').checked ? 'visible' : 'none'}, paint: {'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.3}}
+    ]};
+}
+function setBase(k) {
+  CUR = k;
+  if (map.getLayer('base')) map.removeLayer('base');
+  if (map.getSource('base')) map.removeSource('base');
+  map.addSource('base', baseSource(k));
+  map.addLayer({id: 'base', type: 'raster', source: 'base'}, 'grid-l');
+  $('base').value = k;
+  try { localStorage.setItem('skat2m0_base', k === 'mbt' ? 'osm' : k); } catch (e) {}
+}
+function fillBaseSel() {
+  $('base').innerHTML = Object.keys(BASES).map(k => '<option value="' + k + '">' + BASES[k].n + '</option>').join('') + (MBMETA ? '<option value="mbt">MBTiles: ' + (MBMETA.name || 'файл') + '</option>' : '');
+  $('base').value = CUR;
+}
+
+// ---------- знаки ----------
+function genSyms(n) {
+  const t0 = performance.now(), b = map.getBounds(), w = b.getWest(), e = b.getEast(), s = b.getSouth(), no = b.getNorth(), f = [];
+  for (let i = 0; i < n; i++) {
+    const sd = Math.random() < 0.6 ? 'r' : 'b';
+    f.push({type: 'Feature', id: i, geometry: {type: 'Point', coordinates: [w + (e - w) * Math.random(), s + (no - s) * Math.random()]},
+      properties: {s: KINDS[i % KINDS.length] + '_' + sd, l: String(10 + i % 30) + String(101 + i % 899)}});
+  }
+  FC = {type: 'FeatureCollection', features: f};
+  map.getSource('sym').setData(FC);
+  if (n) map.once('idle', () => rec('Знаки ' + n + ': вывод', (performance.now() - t0).toFixed(0) + ' мс до готовности'));
+}
+function runFrames(sec, onFrame) {
+  return new Promise(res => {
+    const fr = []; let last = performance.now(); const t0 = last;
+    function step(now) {
+      fr.push(now - last); last = now;
+      const t = (now - t0) / 1000;
+      onFrame(t);
+      if (t < sec) requestAnimationFrame(step); else res(fr);
+    }
+    requestAnimationFrame(step);
+  });
+}
+async function flyTest() {
+  if (BUSY) return; BUSY = true;
+  const v0 = {center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch()};
+  let rn = 0; const onR = () => rn++; map.on('render', onR);
+  toast('Облёт 6 с…');
+  const fr = await runFrames(6, t => map.jumpTo({bearing: v0.bearing + t * 40, pitch: 30 + 25 * Math.sin(t * 1.3), zoom: v0.zoom + 0.6 * Math.sin(t * 0.9)}));
+  map.off('render', onR);
+  map.jumpTo(v0);
+  rec('Знаки ' + FC.features.length + ': облёт (поворот, наклон, масштаб)', frameStats(fr) + ', отрисовок ' + (rn / 6).toFixed(0) + '/с');
+  BUSY = false; toast('Готово: результат в отчёте');
+}
+async function moveTest() {
+  if (BUSY) return;
+  if (!FC.features.length) { toast('Сначала добавьте знаки'); return; }
+  BUSY = true; toast('Движение всех знаков 4 с…');
+  const src = map.getSource('sym'), base = FC.features.map(f => f.geometry.coordinates.slice()), sd = [];
+  let up = 0; const onD = e => { if (e.sourceId === 'sym' && e.isSourceLoaded) up++; }; map.on('sourcedata', onD);
+  const fr = await runFrames(4, t => {
+    const a = performance.now(), dd = 0.002;
+    FC.features.forEach((f, i) => { const p = base[i]; f.geometry.coordinates = [p[0] + dd * Math.sin(t * 2 + i), p[1] + dd * Math.cos(t * 2 + i)]; });
+    src.setData(FC); sd.push(performance.now() - a);
+  });
+  map.off('sourcedata', onD);
+  FC.features.forEach((f, i) => { f.geometry.coordinates = base[i]; });
+  src.setData(FC);
+  rec('Знаки ' + FC.features.length + ': движение всех (setData каждый кадр)', frameStats(fr) + ', setData ' + avg(sd).toFixed(1) + ' мс, обновлений источника ' + (up / 4).toFixed(0) + '/с');
+  BUSY = false; toast('Готово: результат в отчёте');
+}
+let drag = null, dragged = false;
+function bindDrag() {
+  const start = e => {
+    if (e.points && e.points.length !== 1) return;
+    const f = e.features && e.features[0]; if (!f) return;
+    e.preventDefault(); drag = {id: f.id, ms: []}; map.getCanvas().style.cursor = 'grabbing';
+  };
+  const move = e => {
+    if (!drag) return;
+    const t = performance.now(), ft = FC.features[drag.id]; if (!ft) return;
+    ft.geometry.coordinates = [e.lngLat.lng, e.lngLat.lat];
+    const src = map.getSource('sym');
+    if (src.updateData) { src.updateData({update: [{id: drag.id, newGeometry: ft.geometry}]}); drag.how = 'updateData'; }
+    else { src.setData(FC); drag.how = 'setData'; }
+    drag.ms.push(performance.now() - t); dragged = true;
+  };
+  const end = () => {
+    if (!drag) return;
+    if (drag.ms.length > 3) rec('Знаки ' + FC.features.length + ': перетаскивание', avg(drag.ms).toFixed(2) + ' мс на шаг (' + drag.how + '), шагов ' + drag.ms.length);
+    drag = null; map.getCanvas().style.cursor = '';
+  };
+  map.on('mousedown', 'sym-i', start); map.on('touchstart', 'sym-i', start);
+  map.on('mousemove', move); map.on('touchmove', move);
+  map.on('mouseup', end); map.on('touchend', end); map.on('touchcancel', end);
+  map.on('mouseenter', 'sym-i', () => { if (!drag) map.getCanvas().style.cursor = 'grab'; });
+  map.on('mouseleave', 'sym-i', () => { if (!drag) map.getCanvas().style.cursor = ''; });
+}
+
+// ---------- сетка ----------
+const GRIDMS = []; let gT = 0, gSeq = 0;
+function gridStep(z) {
+  const raw = 1000 * 2 ** (12 - Math.floor(z));
+  return [1000, 2000, 5000, 10000, 20000, 50000, 100000].find(s => s >= raw * 0.9) || 100000;
+}
+function updGrid() {
+  clearTimeout(gT);
+  gT = setTimeout(async () => {
+    const src = map.getSource('grid');
+    if (!$('grid').checked || map.getZoom() < 6) { src.setData(EMPTYFC); $('gridNote').textContent = $('grid').checked ? 'Сетка видна с z 6.' : 'Сетка выключена.'; return; }
+    const b = map.getBounds(), seq = ++gSeq, t0 = performance.now();
+    const r = await W.call('grid', {w: b.getWest(), s: b.getSouth(), e: b.getEast(), n: b.getNorth(), step: gridStep(map.getZoom())});
+    if (seq !== gSeq) return;
+    src.setData(r.fc);
+    const ms = performance.now() - t0; GRIDMS.push(ms);
+    $('gridNote').textContent = 'Шаг ' + r.step / 1000 + ' км, линий ' + r.n + ', расчёт ' + ms.toFixed(0) + ' мс (Worker).';
+    if (GRIDMS.length % 5 === 1) rec('Сетка СК-42', 'расчёт в Worker ' + avg(GRIDMS).toFixed(0) + ' мс в среднем (' + GRIDMS.length + ' раз), последний ' + r.n + ' линий');
+  }, 120);
+}
+
+// ---------- офлайн: скачивание области ----------
+const lon2x = (lon, n) => Math.min(n - 1, Math.max(0, Math.floor((lon + 180) / 360 * n)));
+function lat2y(lat, n, m3395) {
+  const phi = Math.max(-85.05, Math.min(85.05, lat)) * Math.PI / 180;
+  const v = m3395 ? y3395(phi, 256 * n) / 256 : (1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2 * n;
+  return Math.min(n - 1, Math.max(0, Math.floor(v)));
+}
+let DL = null;
+async function download() {
+  if (DL) { DL.stop = true; return; }
+  if (CUR === 'mbt') { toast('Для .mbtiles скачивание не нужно'); return; }
+  if (OFF) { toast('Снимите «Без сети»'); return; }
+  const B = BASES[CUR], b = map.getBounds(), z0 = Math.max(0, Math.round(map.getZoom()) + 1), z1 = Math.min(B.max, +$('dlz').value || z0);
+  const jobs = [];
+  for (let z = z0; z <= z1; z++) {
+    const n = 2 ** z, x0 = lon2x(b.getWest(), n), x1 = lon2x(b.getEast(), n), y0 = lat2y(b.getNorth(), n, B.m3395), y1 = lat2y(b.getSouth(), n, B.m3395);
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { jobs.push([z, x, y]); if (jobs.length > 30000) { toast('Больше 30 000 тайлов — уменьшите область или z'); return; } }
+  }
+  if (!jobs.length) { toast('Нечего скачивать: z ниже текущего'); return; }
+  DL = {stop: false}; $('dl').textContent = 'Стоп';
+  const t0 = performance.now(); let i = 0, done = 0, ok = 0;
+  const note = () => { $('dlNote').textContent = B.n + ': z ' + z0 + '–' + z1 + ', ' + done + ' / ' + jobs.length + ', успешно ' + ok; };
+  async function worker() {
+    for (;;) {
+      if (DL.stop || i >= jobs.length) return;
+      const [z, x, y] = jobs[i++];
+      try { if (await rawTile(CUR, z, x, y)) ok++; } catch (e) {}
+      done++; if (done % 10 === 0) note();
+    }
+  }
+  await Promise.all(Array.from({length: 6}, worker));
+  await flush(); note();
+  const sec = (performance.now() - t0) / 1000;
+  rec('Скачивание области', B.n + ', ' + ok + ' из ' + jobs.length + ' тайлов за ' + sec.toFixed(1) + ' с (' + (ok / sec).toFixed(1) + ' тайл/с)' + (DL.stop ? ', прервано' : ''));
+  DL = null; $('dl').textContent = 'Скачать';
+  $('cacheNote').textContent = await cacheStat();
+}
+
+// ---------- печать ----------
+function waitIdle(m, ms) {
+  return new Promise(res => { let done = false; const t = setTimeout(() => { done = true; res(false); }, ms); m.once('idle', () => { if (!done) { clearTimeout(t); res(true); } }); m.triggerRepaint(); });
+}
+function saveBlob(blob, name) {
+  const u = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 60000);
+}
+function drawFrame(g, k, pw, ph, M, S, dpi, c) {
+  const L = M.l * k, T = M.t * k, MW = (pw - M.l - M.r) * k, MH = (ph - M.t - M.b) * k;
+  g.strokeStyle = '#000'; g.lineWidth = Math.max(1, 0.25 * k); g.strokeRect(L, T, MW, MH);
+  g.lineWidth = 0.7 * k; g.strokeRect(L - 1.5 * k, T - 1.5 * k, MW + 3 * k, MH + 3 * k);
+  const F = '"IBM Plex Sans Condensed","Roboto Condensed",sans-serif';
+  g.fillStyle = '#000'; g.textBaseline = 'alphabetic';
+  g.font = '600 ' + (4 * k) + 'px ' + F; g.textAlign = 'left'; g.fillText('СКАТ 2.0 — проверка печати (стенд M0)', L, T - 4 * k);
+  g.textAlign = 'right'; g.fillText('М 1:' + S.toLocaleString('ru-RU'), L + MW, T - 4 * k);
+  const km = S <= 50000 ? 1 : S <= 100000 ? 2 : 5, len = km * 1e6 / S, by = (ph - M.b + 6.5) * k;
+  for (let i = 0; i < 4; i++) { g.fillStyle = i % 2 ? '#fff' : '#000'; g.fillRect(L + i * len / 4 * k, by - 1.4 * k, len / 4 * k, 1.4 * k); }
+  g.lineWidth = Math.max(1, 0.2 * k); g.strokeRect(L, by - 1.4 * k, len * k, 1.4 * k);
+  g.fillStyle = '#000'; g.font = (2.8 * k) + 'px ' + F;
+  g.textAlign = 'left'; g.fillText('0', L, by + 3.6 * k); g.textAlign = 'center'; g.fillText(km + ' км', L + len * k, by + 3.6 * k);
+  const p = GEO.toSK(c.lat, c.lng);
+  g.textAlign = 'right';
+  g.fillText('Центр: СК-42 X ' + fmtN(p.x) + '  Y ' + fmtN(p.y) + ', зона ' + p.zone + ' · ' + dpi + ' dpi · ' + new Date().toLocaleString('ru-RU'), L + MW, by + 3.6 * k);
+  g.textAlign = 'left';
+}
+async function doPrint(kind) {
+  if (BUSY) return; BUSY = true;
+  const note = t => { $('pNote').textContent = t; };
+  let pm = null, div = null;
+  try {
+    const fmt = $('pf').value, S = +$('ps').value;
+    let dpi = +$('pd').value, [pw, ph] = fmt === 'A3' ? [420, 297] : [297, 210];
+    if ($('po').value === 'p') [pw, ph] = [ph, pw];
+    const cap = IOS ? 16.7e6 : 2.6e8, dpi0 = dpi;
+    while ((pw * dpi / 25.4) * (ph * dpi / 25.4) > cap * 0.98 && dpi > 100) dpi -= 25;
+    const M = {l: 12, r: 12, t: 16, b: 14}, k = dpi / 25.4;
+    const W0 = Math.round((pw - M.l - M.r) * k), H0 = Math.round((ph - M.t - M.b) * k);
+    const c = map.getCenter(), mpp = S * 0.0254 / dpi;
+    const z = Math.log2(40075016.686 * Math.cos(c.lat * Math.PI / 180) / (512 * mpp));
+    const lim = Math.min(4096, GLI.maxRb || 4096, GLI.maxTex || 4096);
+    const cw = Math.min(W0, lim), ch = Math.min(H0, lim), nx = Math.ceil(W0 / cw), ny = Math.ceil(H0 / ch);
+    const ws = 512 * 2 ** z, mc = maplibregl.MercatorCoordinate.fromLngLat(c), tlx = mc.x * ws - W0 / 2, tly = mc.y * ws - H0 / 2;
+    const ll = (px, py) => new maplibregl.MercatorCoordinate(px / ws, py / ws).toLngLat();
+    const nw = ll(tlx, tly), se = ll(tlx + W0, tly + H0);
+    note('Подготовка ' + W0 + '×' + H0 + ' px, кусков ' + nx * ny + '…');
+    const t0 = performance.now();
+    const st = makeStyle(CUR, '#ffffff');
+    if ($('grid').checked) st.sources.grid.data = (await W.call('grid', {w: nw.lng, s: se.lat, e: se.lng, n: nw.lat, step: S <= 50000 ? 1000 : S <= 100000 ? 2000 : 5000, max: 3000})).fc;
+    div = document.createElement('div');
+    div.style.cssText = 'position:fixed;left:0;top:0;width:' + cw + 'px;height:' + ch + 'px;z-index:-5;pointer-events:none';
+    document.body.appendChild(div);
+    pm = new maplibregl.Map({container: div, style: st, center: c, zoom: z, interactive: false, attributionControl: false, pixelRatio: 1, fadeDuration: 0, maxCanvasSize: [lim, lim], canvasContextAttributes: {preserveDrawingBuffer: true}});
+    await new Promise(r => pm.once('load', r));
+    addSprites(pm);
+    try { await document.fonts.load('600 16px "IBM Plex Sans Condensed"'); } catch (e) {}
+    const P = document.createElement('canvas'); P.width = Math.round(pw * k); P.height = Math.round(ph * k);
+    const g = P.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, P.width, P.height);
+    const ox = Math.round(M.l * k), oy = Math.round(M.t * k);
+    let n = 0, timeouts = 0;
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const x0 = i * cw, y0 = j * ch;
+      note('Кусок ' + (++n) + ' из ' + nx * ny + '…');
+      const idle = waitIdle(pm, 60000);
+      pm.jumpTo({center: ll(tlx + x0 + cw / 2, tly + y0 + ch / 2), zoom: z});
+      if (!(await idle)) timeouts++;
+      const w = Math.min(cw, W0 - x0), h = Math.min(ch, H0 - y0);
+      g.drawImage(pm.getCanvas(), 0, 0, w, h, ox + x0, oy + y0, w, h);
+    }
+    pm.remove(); pm = null; div.remove(); div = null;
+    drawFrame(g, k, pw, ph, M, S, dpi, c);
+    note('Сохранение ' + kind.toUpperCase() + '…');
+    let blob;
+    if (kind === 'png') blob = await new Promise(r => P.toBlob(r, 'image/png'));
+    else {
+      await loadScript(JSPDF, () => window.jspdf);
+      const doc = new window.jspdf.jsPDF({orientation: pw > ph ? 'l' : 'p', unit: 'mm', format: fmt.toLowerCase(), compress: true});
+      doc.addImage(P.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
+      blob = doc.output('blob');
+    }
+    if (!blob) throw new Error('браузер не смог закодировать изображение');
+    saveBlob(blob, 'skat2-m0-' + fmt + '-' + S / 1000 + 'k-' + dpi + 'dpi.' + kind);
+    const sec = ((performance.now() - t0) / 1000).toFixed(1);
+    rec('Печать ' + fmt + ' 1:' + S / 1000 + 'k ' + kind.toUpperCase(), W0 + '×' + H0 + ' px при ' + dpi + ' dpi' + (dpi !== dpi0 ? ' (снижено с ' + dpi0 + ' — предел холста iOS)' : '') + ', кусков ' + nx * ny + ' по ≤' + lim + ' px, ' + sec + ' с, файл ' + (blob.size / 1048576).toFixed(1) + ' МБ' + (timeouts ? ', не дождались тайлов: ' + timeouts : ''));
+    note('Готово за ' + sec + ' с. Файл сохранён.');
+  } catch (e) {
+    rec('Печать', 'ошибка: ' + e.message); note('Ошибка: ' + e.message);
+  } finally {
+    if (pm) pm.remove(); if (div) div.remove(); BUSY = false;
+  }
+}
+
+// ---------- запуск ----------
+function glInfo() {
+  const c = document.createElement('canvas');
+  let gl = c.getContext('webgl2'), v = 2;
+  if (!gl) { gl = c.getContext('webgl'); v = 1; }
+  if (!gl) return {v: 0};
+  const d = gl.getExtension('WEBGL_debug_renderer_info');
+  const r = {v, maxTex: gl.getParameter(gl.MAX_TEXTURE_SIZE), maxRb: gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), ren: d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)};
+  const lc = gl.getExtension('WEBGL_lose_context'); if (lc) lc.loseContext();
+  return r;
+}
+async function boot() {
+  $('ver').textContent = STAND;
+  GLI = glInfo(); renderRep();
+  try { await loadScript(ML_JS, () => window.maplibregl); }
+  catch (e) { $('boot').textContent = 'Не удалось загрузить MapLibre: ' + e.message; return; }
+  MLV = (maplibregl.getVersion && maplibregl.getVersion()) || maplibregl.version || ML_V;
+  $('boot').remove();
+  EMPTY = await canvasBuf(canvas256());
+  maplibregl.addProtocol('skat', async (p, ac) => {
+    const m = /^skat:\/\/(\w+)\/(\d+)\/(\d+)\/(\d+)/.exec(p.url);
+    const b = m ? await getTile(m[1], +m[2], +m[3], +m[4], ac && ac.signal, 0) : null;
+    return {data: b || EMPTY.slice(0)};
+  });
+  maplibregl.addProtocol('mbt', async p => {
+    const m = /(\d+)\/(\d+)\/(\d+)$/.exec(p.url);
+    const b = m ? await W.call('tile', [+m[1], +m[2], +m[3]]) : null;
+    return {data: b || EMPTY.slice(0)};
+  });
+  W.init();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().then(r => rec('Защита хранилища от очистки', r ? 'выдана' : 'не выдана браузером')).catch(() => {});
+  let v = {c: [37.6173, 55.7558], z: 12};
+  try { v = JSON.parse(localStorage.getItem('skat2m0_view')) || v; } catch (e) {}
+  CUR = localStorage.getItem('skat2m0_base') || 'osm'; if (!BASES[CUR]) CUR = 'osm';
+  fillBaseSel();
+  map = new maplibregl.Map({container: 'map', style: makeStyle(CUR), center: v.c, zoom: v.z, maxPitch: 70, attributionControl: {compact: true}});
+  map.addControl(new maplibregl.NavigationControl({visualizePitch: true}), 'top-left');
+  map.addControl(new maplibregl.ScaleControl({unit: 'metric'}), 'bottom-left');
+  map.on('error', e => {
+    const m = String(e.error && e.error.message || e.error || '');
+    if (/glyph|font|\.pbf/i.test(m)) rec('Шрифты подписей', 'не загрузились (' + m.slice(0, 80) + ')');
+    else if (m && !/abort/i.test(m)) err('карта: ' + m);
+  });
+  map.on('load', async () => {
+    rec('Старт: карта готова', (performance.now() / 1000).toFixed(2) + ' с от открытия страницы');
+    map.once('idle', () => rec('Старт: первый экран загружен', (performance.now() / 1000).toFixed(2) + ' с'));
+    await buildSprites(); addSprites(map);
+    bindDrag(); updGrid();
+  });
+  map.on('moveend', () => {
+    updGrid();
+    const c = map.getCenter();
+    try { localStorage.setItem('skat2m0_view', JSON.stringify({c: [c.lng, c.lat], z: map.getZoom()})); } catch (e) {}
+  });
+  map.on('click', e => {
+    if (dragged) { dragged = false; return; }
+    const {lng, lat} = e.lngLat, p = GEO.toSK(lat, lng), el = $('coord');
+    el.innerHTML = 'СК-42 X <b>' + fmtN(p.x) + '</b> Y <b>' + fmtN(p.y) + '</b> (зона ' + p.zone + ') · WGS-84 ' + lat.toFixed(6) + ', ' + lng.toFixed(6);
+    el.style.display = 'block';
+  });
+  let rn = 0, lt = performance.now();
+  map.on('render', () => rn++);
+  setInterval(() => {
+    const now = performance.now(), fps = rn * 1000 / (now - lt); rn = 0; lt = now;
+    $('hud').innerHTML = '<b>' + fps.toFixed(0) + '</b> к/с · знаков <b>' + FC.features.length + '</b> · z <b>' + map.getZoom().toFixed(1) + '</b> · кэш ' + ST.hit + ' · сеть ' + ST.net + ' · подмена ' + ST.over + (OFF ? ' · <span class="w">без сети</span>' : '');
+  }, 500);
+  bindUi();
+}
+function bindUi() {
+  $('tog').onclick = () => $('pnl').classList.toggle('hid');
+  $('coord').onclick = () => { $('coord').style.display = 'none'; };
+  $('base').onchange = e => setBase(e.target.value);
+  document.querySelectorAll('[data-n]').forEach(b => { b.onclick = () => { if (!BUSY && map.isStyleLoaded()) genSyms(+b.dataset.n); }; });
+  $('lbl').onchange = e => map.setLayoutProperty('sym-l', 'visibility', e.target.checked ? 'visible' : 'none');
+  $('tFly').onclick = flyTest; $('tMove').onclick = moveTest;
+  $('grid').onchange = updGrid;
+  $('off').onchange = e => { OFF = e.target.checked; if (!OFF) NETBAD.clear(); setBase(CUR); toast(OFF ? 'Только кэш: недостающие тайлы заменяются увеличенными' : 'Сеть включена'); };
+  $('dl').onclick = download;
+  $('cst').onclick = async () => { $('cacheNote').textContent = await cacheStat(); };
+  $('ccl').onclick = async () => {
+    const d = await idb(); PEND.clear();
+    await new Promise(res => { const tx = d.transaction('t', 'readwrite'); tx.objectStore('t').clear(); tx.oncomplete = res; tx.onerror = res; });
+    $('cacheNote').textContent = 'Кэш очищен. ' + await cacheStat();
+  };
+  $('mbf').onchange = async e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    toast('Открываю ' + f.name + '…', 8000);
+    try {
+      const meta = await W.call('open', f), ms = meta._ms;
+      MBMETA = meta;
+      rec('MBTiles', f.name + ': ' + (f.size / 1048576).toFixed(1) + ' МБ, sql.js ' + ms.sql + ' мс, чтение ' + ms.read + ' мс, открытие ' + ms.open + ' мс, формат ' + (meta.format || '?') + ', z ' + meta.minzoom + '–' + meta.maxzoom + (meta.scheme === 'xyz' ? ', схема xyz' : ''));
+      if (meta.format === 'pbf') { toast('Векторный .mbtiles — его проверим на этапе M2', 5000); return; }
+      fillBaseSel(); setBase('mbt');
+      const bb = String(meta.bounds || '').split(',').map(Number);
+      if (bb.length === 4 && bb.every(isFinite)) map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], {padding: 20, maxZoom: Math.min(+meta.maxzoom || 14, 14)});
+      toast('MBTiles открыт');
+    } catch (er) { rec('MBTiles', 'ошибка: ' + er.message); toast('Ошибка: ' + er.message, 5000); }
+  };
+  $('pPng').onclick = () => doPrint('png'); $('pPdf').onclick = () => doPrint('pdf');
+  $('copy').onclick = async () => {
+    const t = $('rep').textContent;
+    try { await navigator.clipboard.writeText(t); toast('Отчёт скопирован'); }
+    catch (e) { const r = document.createRange(); r.selectNodeContents($('rep')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Выделено — скопируйте вручную'); }
+  };
+  $('rst').onclick = () => { for (const k in R) delete R[k]; try { localStorage.removeItem('skat2m0_rep'); } catch (e) {} ERR.length = 0; renderRep(); };
+}
+boot();
+</script>
+</body>
+</html>
