@@ -1,0 +1,17 @@
+.splash {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  min-height: 100vh;
+}
+.splash-t {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+.splash-v {
+  font-family: var(--font-num);
+  color: var(--muted);
+}

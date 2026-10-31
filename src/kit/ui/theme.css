@@ -1,4 +1,4 @@
-/* Тема «Ночное видение» — токены интерфейса. Красная ночная тема и встроенные шрифты — веха M1b. */
+/* Темы интерфейса: «Ночное видение» (по умолчанию) и «Красная ночная» — сохраняет ночное зрение. */
 :root {
   color-scheme: dark;
   --bg: #070b08;
@@ -13,8 +13,23 @@
   --danger: #ff5a4f;
   --radius: 12px;
   --tap: 44px;
-  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-num: 'IBM Plex Sans Condensed', 'Roboto Condensed', var(--font-ui);
+  --font-ui: 'Golos Text', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-num: 'IBM Plex Sans Condensed', 'Golos Text', 'Roboto Condensed', sans-serif;
+}
+:root[data-theme='red'] {
+  --bg: #0a0000;
+  --surface: #150303;
+  --surface-2: #200505;
+  --line: #3a0d0d;
+  --text: #ff6b5b;
+  --muted: #a8443a;
+  --accent: #ff3b2f;
+  --accent-dim: #4a0f0b;
+  --warn: #ff8a3d;
+  --danger: #ff2a2a;
+}
+:root[data-theme='red'] .k-logo {
+  filter: grayscale(1) sepia(1) saturate(8) hue-rotate(-50deg) brightness(0.75);
 }
 * {
   box-sizing: border-box;

@@ -6,13 +6,29 @@
     <meta name="theme-color" content="#070b08" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon-192.png" />
-    <link rel="apple-touch-icon" href="./icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>СКАТ 2.0</title>
+    <script>
+      // Тема до загрузки приложения: красная ночная не вспыхивает зелёным.
+      try {
+        var t = localStorage.getItem('skat2-theme');
+        if (t) document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+    <style>
+      html { background: #070b08; color: #5cff9a; }
+      html[data-theme='red'] { background: #0a0000; color: #ff3b2f; }
+      html[data-theme='red'] .k-logo { filter: grayscale(1) sepia(1) saturate(8) hue-rotate(-50deg) brightness(0.75); }
+      .splash { display: grid; place-content: center; justify-items: center; gap: 10px; min-height: 100vh; margin: 0;
+        font: 600 28px system-ui, sans-serif; letter-spacing: 0.04em; }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="splash"><img class="k-logo" src="/icon-192.png" width="96" height="96" alt="" />СКАТ 2.0</div>
+    </div>
     <script type="module" src="/src/app/main.tsx"></script>
   </body>
 </html>

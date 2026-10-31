@@ -1,14 +1,39 @@
 import { defineConfig } from 'vitest/config';
+import type { Plugin } from 'vite';
 import preact from '@preact/preset-vite';
 import { fileURLToPath } from 'node:url';
 import pkg from './package.json' with { type: 'json' };
+import { swSource } from './src/platform/sw/template.ts';
 
 const dir = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
+
+/** Генерирует sw.js со списком всех файлов сборки — приложение работает без сети. */
+function serviceWorker(version: string): Plugin {
+  return {
+    name: 'skat2-sw',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const files = new Set([
+        './',
+        './index.html',
+        './manifest.webmanifest',
+        './icon-192.png',
+        './icon-512.png',
+      ]);
+      for (const f of Object.keys(bundle)) if (!f.endsWith('.map') && f !== 'sw.js') files.add(`./${f}`);
+      const list = [...files].sort();
+      let h = 0;
+      for (const ch of list.join('|')) h = (h * 31 + ch.charCodeAt(0)) | 0;
+      const source = swSource(`${version}-${(h >>> 0).toString(36)}`, list);
+      this.emitFile({ type: 'asset', fileName: 'sw.js', source });
+    },
+  };
+}
 
 export default defineConfig({
   // Относительный путь: одна сборка работает и в /skat2/, и в /skat2/beta/, и в APK/EXE.
   base: './',
-  plugins: [preact()],
+  plugins: [preact(), serviceWorker(pkg.version)],
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   resolve: {
     alias: {
