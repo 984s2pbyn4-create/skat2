@@ -1,5 +1,6 @@
 import type { Basemap } from '@core/model/basemap';
 import type { CustomMap } from '@core/model/mapView';
+import type { LocalMap } from '@core/model/overlays';
 
 const YA = 'https://core-renderer-tiles.maps.yandex.net/tiles?l=';
 const G = 'https://mt{s}.google.com/vt/lyrs=';
@@ -104,6 +105,27 @@ const registry = new Map<string, Basemap>(BASEMAPS.map((b) => [b.id, b]));
 export function registerCustom(list: readonly CustomMap[]): void {
   for (const [id] of registry) if (id.startsWith('u_')) registry.delete(id);
   for (const c of list) registry.set(c.id, { ...c, attribution: c.name });
+}
+
+/** Карты из файлов .mbtiles — в общий список подложек. */
+export function registerLocal(list: readonly LocalMap[]): void {
+  for (const [id] of registry) if (id.startsWith('mbt_')) registry.delete(id);
+  for (const m of list) {
+    registry.set(m.id, {
+      id: m.id,
+      name: `Файл: ${m.name}`,
+      url: '',
+      maxZoom: m.maxZoom,
+      minZoom: m.minZoom,
+      ...(m.bounds ? { bounds: m.bounds } : {}),
+      local: true,
+      attribution: m.name,
+    });
+  }
+}
+
+export function localBasemaps(): Basemap[] {
+  return [...registry.values()].filter((b) => b.local);
 }
 
 export function basemapById(id: string): Basemap {

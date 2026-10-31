@@ -5,16 +5,21 @@ import { Button } from '@kit/ui/Button';
 import { Sheet } from '@kit/ui/Sheet';
 import { BASEMAPS } from './basemaps';
 import { tiles } from './engine';
+import { ExtraLayers } from './ExtraLayers';
+import { layers } from './layersState';
+import type maplibregl from 'maplibre-gl';
 
 interface Props {
   readonly view: MapView;
   readonly onChange: (patch: Partial<MapView>) => void;
   readonly onDownload: () => void;
+  readonly map: maplibregl.Map;
+  readonly onAdjust: (id: string) => void;
   readonly onClose: () => void;
 }
 
 /** Подложки (свои — по адресу), сетка, режим без сети, кэш тайлов. */
-export function LayersSheet({ view, onChange, onDownload, onClose }: Props) {
+export function LayersSheet({ view, map, onChange, onDownload, onAdjust, onClose }: Props) {
   const [count, setCount] = useState<number | null>(null);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
@@ -71,6 +76,7 @@ export function LayersSheet({ view, onChange, onDownload, onClose }: Props) {
       <section class="k-section">
         <h2>Подложка</h2>
         {BASEMAPS.map((b) => radio(b.id, b.name))}
+        {layers.value.local.map((m) => radio(m.id, `Файл: ${m.name}`))}
         {view.custom.map((c) => (
           <div key={c.id} class="k-row">
             {radio(c.id, c.name)}
@@ -80,6 +86,12 @@ export function LayersSheet({ view, onChange, onDownload, onClose }: Props) {
           </div>
         ))}
       </section>
+      <ExtraLayers
+        map={map}
+        basemap={view.basemap}
+        onBasemap={(id) => onChange({ basemap: id })}
+        onAdjust={onAdjust}
+      />
       <section class="k-section">
         <h2>Своя карта</h2>
         <p class="k-muted">

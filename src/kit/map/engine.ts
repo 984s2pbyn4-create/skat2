@@ -41,6 +41,8 @@ export function rasterSource(b: Basemap) {
     tiles: [`skat://${b.id}/{z}/{x}/{y}`],
     tileSize: 256,
     maxzoom: b.maxZoom,
+    ...(b.minZoom !== undefined ? { minzoom: b.minZoom } : {}),
+    ...(b.bounds ? { bounds: [...b.bounds] as [number, number, number, number] } : {}),
     attribution: b.attribution,
   };
 }

@@ -14,6 +14,11 @@ export interface Basemap {
   readonly subdomains?: string;
   /** Тёмная подложка (спутник): сетка и подписи рисуются светлыми. */
   readonly dark?: boolean;
+  /** Карта из файла (.mbtiles): тайлы только из памяти устройства. */
+  readonly local?: boolean;
+  readonly minZoom?: number;
+  /** Охват [запад, юг, восток, север] — за его пределами тайлы не запрашиваются. */
+  readonly bounds?: readonly [number, number, number, number];
 }
 
 /** Квадключ Bing для тайла. */

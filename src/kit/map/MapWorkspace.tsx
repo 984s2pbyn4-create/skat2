@@ -15,6 +15,11 @@ import { areas, initDownloads, loadPlaces, placesVersion } from './downloads';
 import { EMPTY_FC, buildStyle, registerSkatProtocol, setBasemap, setPlaces, tiles } from './engine';
 import { watchHeading } from './heading';
 import { LayersSheet } from './LayersSheet';
+import { ImageAdjust } from './ImageAdjust';
+import { MeasureTool } from './MeasureTool';
+import { TrackPanel } from './TrackPanel';
+import { applyLayers, initLayers, layers } from './layersState';
+import { initTrack, track } from './track';
 import { loadMapView, saveMapView } from './persist';
 
 interface Props {
@@ -52,10 +57,11 @@ export function MapWorkspace({ title, onExit }: Props) {
   const [heading, setHeading] = useState<(() => void) | null>(null);
   const [message, setMessage] = useState('');
   const [height, setHeight] = useState<number | null | undefined>(undefined);
+  const [tool, setTool] = useState<'measure' | 'track' | { adjust: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
-    void loadMapView().then((v) => {
+    void Promise.all([loadMapView(), initLayers(), initTrack()]).then(([v]) => {
       if (!alive) return;
       viewRef.current = v;
       registerCustom(v.custom);
@@ -92,6 +98,14 @@ export function MapWorkspace({ title, onExit }: Props) {
       attributionControl: { compact: true },
     });
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+    m.addControl(
+      new maplibregl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: true,
+        showAccuracyCircle: true,
+      }),
+      'bottom-right',
+    );
     m.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
     let t: ReturnType<typeof setTimeout> | undefined;
     let hSeq = 0;
@@ -113,6 +127,13 @@ export function MapWorkspace({ title, onExit }: Props) {
     m.on('load', () => {
       updateGrid(m, v.grid);
       updateHeight();
+      m.addSource('track', { type: 'geojson', data: EMPTY_FC });
+      m.addLayer({
+        id: 'track',
+        type: 'line',
+        source: 'track',
+        paint: { 'line-color': '#ff2d55', 'line-width': 3 },
+      });
       setMap(m);
       void initDownloads();
     });
@@ -124,6 +145,25 @@ export function MapWorkspace({ title, onExit }: Props) {
   }, [view === null]);
 
   useEffect(() => () => heading?.(), [heading]);
+
+  const layersState = layers.value;
+  useEffect(() => {
+    if (map) void applyLayers(map);
+  }, [map, layersState]);
+
+  const trackPts = track.value.points;
+  useEffect(() => {
+    const src = map?.getSource('track') as GeoJSONSource | undefined;
+    src?.setData(
+      trackPts.length > 1
+        ? {
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: trackPts.map((p) => [...p]) },
+            properties: {},
+          }
+        : EMPTY_FC,
+    );
+  }, [map, trackPts]);
 
   const showPlaces = view?.places ?? true;
   const pv = placesVersion.value;
@@ -194,6 +234,29 @@ export function MapWorkspace({ title, onExit }: Props) {
         </Button>
         <Button onClick={() => setSheet('layers')}>Слои</Button>
       </header>
+      <div class="m-rail">
+        <Button
+          variant={tool === 'measure' ? 'primary' : 'default'}
+          onClick={() => setTool(tool === 'measure' ? null : 'measure')}
+        >
+          Линейка
+        </Button>
+        <Button
+          variant={tool === 'track' || track.value.recording ? 'primary' : 'default'}
+          onClick={() => setTool(tool === 'track' ? null : 'track')}
+        >
+          Трек
+        </Button>
+      </div>
+      {map && tool === 'measure' && <MeasureTool map={map} onClose={() => setTool(null)} />}
+      {map && tool === 'track' && <TrackPanel map={map} onClose={() => setTool(null)} />}
+      {map &&
+        tool !== null &&
+        typeof tool === 'object' &&
+        (() => {
+          const o = layersState.overlays.find((x) => x.id === tool.adjust);
+          return o ? <ImageAdjust map={map} overlay={o} onDone={() => setTool(null)} /> : null;
+        })()}
       {view.offline && <div class="m-badge">Без сети</div>}
       {message && (
         <button type="button" class="m-msg" onClick={() => setMessage('')}>
@@ -203,11 +266,16 @@ export function MapWorkspace({ title, onExit }: Props) {
       {map && (
         <CoordBar map={map} format={view.coords} height={height} onFormat={(coords) => update({ coords })} />
       )}
-      {sheet === 'layers' && (
+      {sheet === 'layers' && map && (
         <LayersSheet
           view={view}
+          map={map}
           onChange={change}
           onDownload={() => setSheet('downloads')}
+          onAdjust={(id) => {
+            setSheet(null);
+            setTool({ adjust: id });
+          }}
           onClose={() => setSheet(null)}
         />
       )}

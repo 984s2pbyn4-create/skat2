@@ -1,6 +1,6 @@
 {
   "name": "skat2",
-  "version": "2.0.0-alpha.7",
+  "version": "2.0.0-alpha.8",
   "description": "СКАТ 2.0 — полевой топопланшет СК-42",
   "private": true,
   "type": "module",
@@ -25,6 +25,7 @@
     "@preact/signals": "2.11.3",
     "maplibre-gl": "5.24.0",
     "preact": "10.29.8",
+    "sql.js": "1.15.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
@@ -32,6 +33,7 @@
     "@preact/preset-vite": "2.10.6",
     "@types/geojson": "7946.0.16",
     "@types/node": "22.20.5",
+    "@types/sql.js": "1.4.11",
     "@vitest/coverage-v8": "4.1.12",
     "dependency-cruiser": "18.6.0",
     "eslint": "9.39.5",

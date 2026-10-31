@@ -92,3 +92,11 @@ export async function dbDeleteMany(store: StoreName, keys: readonly IDBValidKey[
   for (const k of keys) s.delete(k);
   return done(tx);
 }
+
+/** Удалить все ключи в диапазоне [lower, upper] — например, все тайлы одной карты. */
+export async function dbDeleteRange(store: StoreName, lower: string, upper: string): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(store, 'readwrite');
+  tx.objectStore(store).delete(IDBKeyRange.bound(lower, upper));
+  return done(tx);
+}

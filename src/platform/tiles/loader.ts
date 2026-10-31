@@ -61,7 +61,7 @@ export class TileLoader {
       this.stats.hit++;
       return cached;
     }
-    if (this.offline || cachedOnly) {
+    if (this.offline || cachedOnly || b.local) {
       this.stats.miss++;
       return null;
     }
