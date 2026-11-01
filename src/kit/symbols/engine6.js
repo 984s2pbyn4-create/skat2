@@ -1,5 +1,6 @@
 // Отрисовка тактических знаков на canvas — перенесено из СКАТ 6.x без изменения логики
 // (точечные знаки и линейные/площадные по Приложению 3). Типы — engine6.d.ts.
+// Единственное изменение: при зеркальном отражении (o.mx) текст внутри знака не зеркалится.
 /* eslint-disable */
 import SYM_DEF from './symbols6.json';
 
@@ -21,7 +22,7 @@ if (fc){ g.fillStyle = fc; P.z.forEach(v => g.fill(v)); }
 P.f.forEach((v, i) => { if (fk[i] === 'y'){ g.fillStyle = SCOL.y; g.fill(v); } });
 g.lineWidth = (o && o.lw) || 2.6; if (o && o.dash) g.setLineDash([3, 2.5]); P.d.forEach((v, i) => { g.strokeStyle = cc(dk[i]); g.stroke(v); }); g.setLineDash([]);
 P.f.forEach((v, i) => { if (fk[i] !== 'y'){ g.fillStyle = cc(fk[i]); g.fill(v); } });
-(s.tx || []).forEach(t => { g.font = `700 ${t.s}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 3; g.strokeStyle = '#fff'; g.strokeText(t.t, t.x, t.y); g.fillStyle = cc(t.c); g.fillText(t.t, t.x, t.y); });
+(s.tx || []).forEach(t => { g.font = `700 ${t.s}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 3; g.strokeStyle = '#fff'; const mx = o && o.mx; if (mx){ g.save(); g.translate(t.x, t.y); g.scale(-1, 1); } const tx = mx ? 0 : t.x, ty = mx ? 0 : t.y; g.strokeText(t.t, tx, ty); g.fillStyle = cc(t.c); g.fillText(t.t, tx, ty); if (mx) g.restore(); });
 g.restore();
 }
 export const LSPEC = {

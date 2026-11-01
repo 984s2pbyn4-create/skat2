@@ -65,6 +65,14 @@ export function ObjectCard({ obj, map }: { readonly obj: MapObject; readonly map
       </div>
       {point && <p class="k-muted">Выбранный знак можно перетащить по карте.</p>}
       <div class="k-row">
+        {point && (
+          <Button
+            variant={obj.mirror ? 'primary' : 'default'}
+            onClick={() => objects.update(obj.id, { mirror: !obj.mirror })}
+          >
+            Отразить
+          </Button>
+        )}
         {point && <Button onClick={toCenter}>В перекрестие</Button>}
         <Button onClick={() => objects.remove(obj.id)}>Удалить</Button>
         <Button onClick={() => (selected.value = null)}>Закрыть</Button>

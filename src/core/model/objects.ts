@@ -16,6 +16,8 @@ const ObjSchema = z.object({
   size: z.number(),
   label: z.string(),
   note: z.string(),
+  /** Зеркальное отражение точечного знака (текст внутри знака не отражается). */
+  mirror: z.optional(z.boolean()),
 });
 export type MapObject = z.infer<typeof ObjSchema>;
 

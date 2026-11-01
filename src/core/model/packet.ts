@@ -37,7 +37,15 @@ export function objectsToPacket(
         : o.kind === 'area'
           ? { type: 'Polygon', coordinates: [[...o.coords, o.coords[0] ?? [0, 0]].map((c) => [...c])] }
           : { type: 'LineString', coordinates: o.coords.map((c) => [...c]) },
-    properties: { sym: o.sym, side: o.side, label: o.label, rot: o.rot, size: o.size, note: o.note },
+    properties: {
+      sym: o.sym,
+      side: o.side,
+      label: o.label,
+      rot: o.rot,
+      size: o.size,
+      note: o.note,
+      mirror: Boolean(o.mirror),
+    },
   }));
   return { v: 1, id, from, title, layers: [{ name: 'Обстановка', features }] };
 }
@@ -58,6 +66,7 @@ export function packetToObjects(p: LayerPacket, newId: () => string): MapObject[
         size: Number(pr.size) || 1,
         label: typeof pr.label === 'string' ? pr.label : '',
         note: typeof pr.note === 'string' ? pr.note : '',
+        mirror: pr.mirror === true,
       };
       const pair = (c: number[]): [number, number] => [c[0] ?? 0, c[1] ?? 0];
       if (g?.type === 'Point') out.push({ ...base, kind: 'point', coords: [pair(g.coordinates)] });

@@ -55,9 +55,9 @@ export function attachObjects(
   let draft: Draft | null = null;
 
   const onMissing = (e: { id: string }) => {
-    const m = /^sym\/(.+)\/([rb])$/.exec(e.id);
+    const m = /^sym\/([^/]+)\/([rb])(\/m)?$/.exec(e.id);
     if (!m || map.hasImage(e.id)) return;
-    const img = symbolImage(m[1] as string, m[2] as Side);
+    const img = symbolImage(m[1] as string, m[2] as Side, Boolean(m[3]));
     if (img) map.addImage(e.id, img, { pixelRatio: 2 });
   };
   map.on('styleimagemissing', onMissing);
@@ -199,7 +199,13 @@ export function attachObjects(
     const f: Feature[] = points.map((o) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [...(o.coords[0] ?? [0, 0])] },
-      properties: { id: o.id, img: `sym/${o.sym}/${o.side}`, rot: o.rot, size: o.size, label: o.label },
+      properties: {
+        id: o.id,
+        img: `sym/${o.sym}/${o.side}${o.mirror ? '/m' : ''}`,
+        rot: o.rot,
+        size: o.size,
+        label: o.label,
+      },
     }));
     (map.getSource('objs-p') as maplibregl.GeoJSONSource | undefined)?.setData({
       type: 'FeatureCollection',

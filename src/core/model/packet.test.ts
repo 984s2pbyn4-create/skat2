@@ -4,7 +4,7 @@ import type { MapObject } from './objects';
 
 const base = { side: 'r' as const, rot: 0, size: 1, label: '12101', note: '' };
 const objs: MapObject[] = [
-  { ...base, id: 'a', sym: 'pu', kind: 'point', coords: [[37.6, 49.3]] },
+  { ...base, id: 'a', sym: 'pu', kind: 'point', coords: [[37.6, 49.3]], mirror: true },
   {
     ...base,
     id: 'b',
@@ -45,6 +45,8 @@ describe('пакет обмена', () => {
       ['n2', 'area', 'a_mine', 'b', 3],
     ]);
     expect(back[0]?.label).toBe('12101');
+    expect(back[0]?.mirror).toBe(true);
+    expect(back[1]?.mirror).toBe(false);
   });
   it('чужой файл — понятная ошибка', () => {
     expect(() => parsePacket({ v: 2 })).toThrow('пакетом обмена');

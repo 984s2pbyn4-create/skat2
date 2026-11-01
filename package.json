@@ -1,6 +1,6 @@
 {
   "name": "skat2",
-  "version": "2.0.0-alpha.10",
+  "version": "2.0.0-alpha.11",
   "description": "СКАТ 2.0 — полевой топопланшет СК-42",
   "private": true,
   "type": "module",

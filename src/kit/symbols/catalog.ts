@@ -45,13 +45,13 @@ export function colorOf(sym: string, side: Side): string {
 }
 
 /** Изображение точечного знака для карты (рамка 32×32, плотность 2). */
-export function symbolImage(sym: string, side: Side): ImageData | null {
+export function symbolImage(sym: string, side: Side, mirror = false): ImageData | null {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
   const g = c.getContext('2d');
   if (!g || !SYM_BY[sym]) return null;
   g.scale(2, 2);
-  drawSym(g, sym, 16, 16, colorOf(sym, side), null, 0, 1);
+  drawSym(g, sym, 16, 16, colorOf(sym, side), null, 0, 1, mirror ? { mx: true } : undefined);
   return g.getImageData(0, 0, 64, 64);
 }
 
