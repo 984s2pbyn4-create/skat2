@@ -25,9 +25,12 @@ export function registerSkatProtocol(): void {
   registered = true;
   maplibregl.addProtocol('skat', async (p, ac) => {
     const m = /^skat:\/\/([\w-]+)\/(\d+)\/(\d+)\/(\d+)/.exec(p.url);
+    const id = m?.[1] ?? '';
     const b = m
-      ? await tiles.get(basemapById(m[1] ?? ''), Number(m[2]), Number(m[3]), Number(m[4]), ac.signal)
+      ? await tiles.get(basemapById(id), Number(m[2]), Number(m[3]), Number(m[4]), ac.signal)
       : null;
+    // Нет высот — ошибка тайла (рельеф просто не рисуется), нет карты — прозрачный тайл.
+    if (!b && id === 'dem') throw new Error('Нет данных высот');
     return { data: b ?? (await emptyTile()).slice(0) };
   });
 }
@@ -183,4 +186,22 @@ export function setBasemap(map: maplibregl.Map, b: Basemap): void {
   map.addSource('base', rasterSource(b));
   map.addLayer({ id: 'base', type: 'raster', source: 'base' }, 'grid-s');
   applyGridColors(map, Boolean(b.dark));
+}
+
+/** Отмывка рельефа (CORE-12) под сеткой. */
+export function setHillshade(map: maplibregl.Map, on: boolean): void {
+  if (map.getLayer('hs')) map.removeLayer('hs');
+  if (map.getSource('hs')) map.removeSource('hs');
+  if (!on) return;
+  map.addSource('hs', {
+    type: 'raster-dem',
+    tiles: ['skat://dem/{z}/{x}/{y}'],
+    tileSize: 256,
+    encoding: 'terrarium',
+    maxzoom: 15,
+  });
+  map.addLayer(
+    { id: 'hs', type: 'hillshade', source: 'hs', paint: { 'hillshade-exaggeration': 0.45 } },
+    'grid-s',
+  );
 }

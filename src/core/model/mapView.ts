@@ -25,8 +25,11 @@ const MapViewSchema = z.object({
   coords: z.enum(COORD_FORMATS),
   custom: z.optional(z.array(CustomMapSchema)),
   places: z.optional(z.boolean()),
+  hillshade: z.optional(z.boolean()),
 });
-export type MapView = Omit<z.infer<typeof MapViewSchema>, 'custom' | 'places'> & {
+export type MapView = Omit<z.infer<typeof MapViewSchema>, 'custom' | 'places' | 'hillshade'> & {
+  /** Отмывка рельефа. */
+  hillshade: boolean;
   custom: CustomMap[];
   /** Показывать скачанные названия населённых пунктов. */
   places: boolean;
@@ -46,11 +49,17 @@ export const DEFAULT_MAP_VIEW: MapView = {
   coords: 'sk42',
   custom: [],
   places: true,
+  hillshade: false,
 };
 
 export function parseMapView(raw: unknown): MapView {
   const r = MapViewSchema.safeParse(raw);
   return r.success
-    ? { ...r.data, custom: r.data.custom ?? [], places: r.data.places ?? true }
+    ? {
+        ...r.data,
+        custom: r.data.custom ?? [],
+        places: r.data.places ?? true,
+        hillshade: r.data.hillshade ?? false,
+      }
     : DEFAULT_MAP_VIEW;
 }

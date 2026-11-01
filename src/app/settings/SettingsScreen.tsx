@@ -6,6 +6,8 @@ import { createVault, rewrapVault } from '@platform/crypto/vault';
 import { exportBackup, importBackup } from '@platform/storage/backup';
 import { persistStorage, storageUsage } from '@platform/storage/db';
 import { saveBlob } from '@platform/files/save';
+import { reseal } from '@platform/storage/secure';
+import { PRESETS, SWITCHABLE } from '@kit/feature/profiles';
 import { dataKey, saveSettings, settings } from '../state';
 
 const THEMES: ReadonlyArray<readonly [Theme, string]> = [
@@ -54,6 +56,7 @@ export function SettingsScreen({ onExit }: { readonly onExit: () => void }) {
       else {
         const created = await createVault(pin);
         vault = created.vault;
+        await reseal(null, created.key);
         dataKey.value = created.key;
       }
       await saveSettings({ vault });
@@ -84,6 +87,8 @@ export function SettingsScreen({ onExit }: { readonly onExit: () => void }) {
 
   const removePin = async () => {
     if (!confirm('Убрать PIN? Приложение будет открываться без кода.')) return;
+    setInfo('Снятие шифрования…');
+    await reseal(dataKey.value, null);
     await saveSettings({ vault: null });
     dataKey.value = null;
     setInfo('PIN убран.');
@@ -140,7 +145,9 @@ export function SettingsScreen({ onExit }: { readonly onExit: () => void }) {
       <section class="k-section">
         <h2>PIN-код</h2>
         <p class="k-muted">
-          {s.vault ? 'PIN задан: приложение открывается только по коду.' : 'PIN не задан.'}
+          {s.vault
+            ? 'PIN задан: приложение открывается только по коду, обстановка на устройстве зашифрована.'
+            : 'PIN не задан.'}
         </p>
         <div class="k-row">
           <Button onClick={() => setFlow({ step: 'new', n: 0 })}>
@@ -163,6 +170,40 @@ export function SettingsScreen({ onExit }: { readonly onExit: () => void }) {
             onChange={(e) => void restore(e.currentTarget.files?.[0])}
           />
         </div>
+      </section>
+      <section class="k-section">
+        <h2>Профиль устройства</h2>
+        <p class="k-muted">
+          Какие функции видны на этом устройстве. Данные выключенных функций не удаляются.
+        </p>
+        <div class="k-row">
+          {PRESETS.map((p) => (
+            <Button
+              key={p.id}
+              variant={
+                JSON.stringify([...(s.off ?? [])].sort()) === JSON.stringify([...p.off].sort())
+                  ? 'primary'
+                  : 'default'
+              }
+              onClick={() => void saveSettings({ off: [...p.off] })}
+            >
+              {p.name}
+            </Button>
+          ))}
+        </div>
+        {SWITCHABLE.map(([id, name]) => (
+          <label key={id} class="k-opt">
+            <input
+              type="checkbox"
+              checked={!(s.off ?? []).includes(id)}
+              onChange={(e) => {
+                const off = (s.off ?? []).filter((x) => x !== id);
+                void saveSettings({ off: e.currentTarget.checked ? off : [...off, id] });
+              }}
+            />
+            {name}
+          </label>
+        ))}
       </section>
       <section class="k-section">
         <h2>Хранилище</h2>

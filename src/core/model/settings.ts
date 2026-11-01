@@ -16,6 +16,8 @@ export const SettingsSchema = z.object({
   version: z.literal(1),
   theme: z.enum(THEMES),
   vault: z.nullable(VaultSchema),
+  /** Выключенные на устройстве функции (CORE-19). */
+  off: z.optional(z.array(z.string())),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

@@ -1,4 +1,5 @@
 import type { Basemap } from '@core/model/basemap';
+import { DEM } from '@platform/tiles/elevation';
 import type { CustomMap } from '@core/model/mapView';
 import type { LocalMap } from '@core/model/overlays';
 
@@ -100,6 +101,8 @@ export const BASEMAPS: readonly Basemap[] = [
 ];
 
 const registry = new Map<string, Basemap>(BASEMAPS.map((b) => [b.id, b]));
+/** Высоты (рельеф) — тот же протокол skat://, в списке подложек не показываются. */
+registry.set(DEM.id, DEM);
 
 /** Свои карты пользователя — в общий список подложек. */
 export function registerCustom(list: readonly CustomMap[]): void {

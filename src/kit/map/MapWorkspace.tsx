@@ -12,7 +12,18 @@ import { elevation } from '@platform/tiles/elevation';
 import { CoordBar } from './CoordBar';
 import { DownloadsSheet, activeProgress } from './DownloadsSheet';
 import { areas, initDownloads, loadPlaces, placesVersion } from './downloads';
-import { EMPTY_FC, buildStyle, registerSkatProtocol, setBasemap, setPlaces, tiles } from './engine';
+import {
+  EMPTY_FC,
+  buildStyle,
+  registerSkatProtocol,
+  setBasemap,
+  setHillshade,
+  setPlaces,
+  tiles,
+} from './engine';
+import { featureOn } from '@kit/feature/profiles';
+import { ExchangeSheet } from '@kit/exchange/ExchangeSheet';
+import { SearchSheet } from './SearchSheet';
 import { watchHeading } from './heading';
 import { LayersSheet } from './LayersSheet';
 import { ImageAdjust } from './ImageAdjust';
@@ -63,7 +74,7 @@ export function MapWorkspace({ title, onExit, project = 'combat' }: Props) {
   const viewRef = useRef<MapView | null>(null);
   const [view, setView] = useState<MapView | null>(null);
   const [map, setMap] = useState<maplibregl.Map | null>(null);
-  const [sheet, setSheet] = useState<'layers' | 'downloads' | 'symbols' | null>(null);
+  const [sheet, setSheet] = useState<'layers' | 'downloads' | 'symbols' | 'search' | 'exchange' | null>(null);
   const [heading, setHeading] = useState<(() => void) | null>(null);
   const [message, setMessage] = useState('');
   const [height, setHeight] = useState<number | null | undefined>(undefined);
@@ -244,6 +255,11 @@ export function MapWorkspace({ title, onExit, project = 'combat' }: Props) {
   useEffect(() => () => objLayer.current?.destroy(), []);
   const selObj = objs.find((o) => o.id === sel);
 
+  const relief = Boolean(view?.hillshade) && featureOn('CORE-12');
+  useEffect(() => {
+    if (map) setHillshade(map, relief);
+  }, [map, relief]);
+
   const showPlaces = view?.places ?? true;
   const pv = placesVersion.value;
   useEffect(() => {
@@ -308,33 +324,45 @@ export function MapWorkspace({ title, onExit, project = 'combat' }: Props) {
             Компас
           </Button>
         )}
-        <Button variant={progress !== null ? 'primary' : 'default'} onClick={() => setSheet('downloads')}>
-          {progress === null ? 'Загрузки' : progress === 'busy' ? 'Загрузки…' : `Загрузки ${progress} %`}
-        </Button>
+        {featureOn('CORE-08') && <Button onClick={() => setSheet('search')}>Поиск</Button>}
+        {featureOn('CORE-03') && (
+          <Button variant={progress !== null ? 'primary' : 'default'} onClick={() => setSheet('downloads')}>
+            {progress === null ? 'Загрузки' : progress === 'busy' ? 'Загрузки…' : `Загрузки ${progress} %`}
+          </Button>
+        )}
         <Button onClick={() => setSheet('layers')}>Слои</Button>
       </header>
       <div class="m-rail">
-        <Button variant={sheet === 'symbols' ? 'primary' : 'default'} onClick={() => setSheet('symbols')}>
-          Знаки
-        </Button>
-        <Button disabled={!history.value.past.length} onClick={() => objects.undo()}>
-          ↶ Отменить
-        </Button>
-        <Button disabled={!history.value.future.length} onClick={() => objects.redo()}>
-          ↷ Повторить
-        </Button>
-        <Button
-          variant={tool === 'measure' ? 'primary' : 'default'}
-          onClick={() => setTool(tool === 'measure' ? null : 'measure')}
-        >
-          Линейка
-        </Button>
-        <Button
-          variant={tool === 'track' || track.value.recording ? 'primary' : 'default'}
-          onClick={() => setTool(tool === 'track' ? null : 'track')}
-        >
-          Трек
-        </Button>
+        {featureOn('CORE-10') && (
+          <>
+            <Button variant={sheet === 'symbols' ? 'primary' : 'default'} onClick={() => setSheet('symbols')}>
+              Знаки
+            </Button>
+            <Button disabled={!history.value.past.length} onClick={() => objects.undo()}>
+              ↶ Отменить
+            </Button>
+            <Button disabled={!history.value.future.length} onClick={() => objects.redo()}>
+              ↷ Повторить
+            </Button>
+          </>
+        )}
+        {featureOn('CORE-13') && (
+          <Button
+            variant={tool === 'measure' ? 'primary' : 'default'}
+            onClick={() => setTool(tool === 'measure' ? null : 'measure')}
+          >
+            Линейка
+          </Button>
+        )}
+        {featureOn('CORE-07') && (
+          <Button
+            variant={tool === 'track' || track.value.recording ? 'primary' : 'default'}
+            onClick={() => setTool(tool === 'track' ? null : 'track')}
+          >
+            Трек
+          </Button>
+        )}
+        {featureOn('CORE-16') && <Button onClick={() => setSheet('exchange')}>Обмен</Button>}
       </div>
       {map && tool === 'measure' && <MeasureTool map={map} onClose={() => setTool(null)} />}
       {map && tool === 'track' && <TrackPanel map={map} onClose={() => setTool(null)} />}
@@ -382,6 +410,10 @@ export function MapWorkspace({ title, onExit, project = 'combat' }: Props) {
         />
       )}
       {map && !placing && tool === null && selObj && <ObjectCard obj={selObj} map={map} />}
+      {sheet === 'search' && map && <SearchSheet map={map} onClose={() => setSheet(null)} />}
+      {sheet === 'exchange' && (
+        <ExchangeSheet mode={project === 'combat' ? 'combat' : 'combat'} onClose={() => setSheet(null)} />
+      )}
       {sheet === 'symbols' && (
         <Palette
           side={side}

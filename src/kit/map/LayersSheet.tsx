@@ -7,6 +7,7 @@ import { BASEMAPS } from './basemaps';
 import { tiles } from './engine';
 import { ExtraLayers } from './ExtraLayers';
 import { layers } from './layersState';
+import { featureOn } from '@kit/feature/profiles';
 import type maplibregl from 'maplibre-gl';
 
 interface Props {
@@ -153,6 +154,16 @@ export function LayersSheet({ view, map, onChange, onDownload, onAdjust, onClose
           />
           Километровая сетка СК-42
         </label>
+        {featureOn('CORE-12') && (
+          <label class="k-opt">
+            <input
+              type="checkbox"
+              checked={view.hillshade}
+              onChange={(e) => onChange({ hillshade: e.currentTarget.checked })}
+            />
+            Отмывка рельефа
+          </label>
+        )}
         <label class="k-opt">
           <input
             type="checkbox"
@@ -174,7 +185,7 @@ export function LayersSheet({ view, map, onChange, onDownload, onAdjust, onClose
         </label>
         <p class="k-muted">Сохранено тайлов: {count ?? '…'}</p>
         <div class="k-row">
-          <Button onClick={onDownload}>Загрузки…</Button>
+          {featureOn('CORE-03') && <Button onClick={onDownload}>Загрузки…</Button>}
           <Button onClick={() => void clear()}>Очистить</Button>
         </div>
       </section>

@@ -15,7 +15,7 @@ import {
   type MapObject,
   type ObjDoc,
 } from '@core/model/objects';
-import { dbGet, dbPut } from '@platform/storage/db';
+import { secureGet, securePut } from '@platform/storage/secure';
 
 /** Обстановка режима: объекты, корзина, отмена и повтор (CORE-14). Сохраняется через 500 мс после изменения. */
 export const history = signal<History>(startHistory(EMPTY_DOC));
@@ -29,7 +29,7 @@ export async function loadObjects(project: string): Promise<void> {
   if (key === project) return;
   key = project;
   history.value = startHistory(
-    parseDoc(await dbGet('projects', `${project}/objects`).catch(() => undefined)),
+    parseDoc(await secureGet('projects', `${project}/objects`).catch(() => undefined)),
   );
 }
 
@@ -38,7 +38,7 @@ function persist(): void {
   const k = key;
   timer = setTimeout(() => {
     timer = null;
-    void dbPut('projects', `${k}/objects`, history.value.present).catch((e: unknown) =>
+    void securePut('projects', `${k}/objects`, history.value.present).catch((e: unknown) =>
       console.warn('Обстановка не сохранена:', e),
     );
   }, 500);
@@ -53,6 +53,10 @@ export const objects = {
   add(o: MapObject) {
     apply(addObject(doc.value, o));
     selected.value = o.id;
+  },
+  /** Добавить много объектов одним шагом истории (приём пакета). */
+  addMany(list: readonly MapObject[]) {
+    apply(list.reduce((d, o) => addObject(d, o), doc.value));
   },
   update(id: string, p: Partial<MapObject>) {
     apply(updateObject(doc.value, id, p));

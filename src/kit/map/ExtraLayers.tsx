@@ -6,6 +6,7 @@ import { readVectorFile } from '@platform/files/vector';
 import { importMbtiles, removeLocalTiles } from '@platform/mbtiles/import';
 import { BASEMAPS } from './basemaps';
 import { addOverlay, layers, patchOverlay, removeOverlay, setLayers } from './layersState';
+import { featureOn } from '@kit/feature/profiles';
 
 const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const uid = (p: string) => `${p}${Date.now().toString(36)}`;
@@ -151,77 +152,85 @@ export function ExtraLayers({ map, basemap, onBasemap, onAdjust }: Props) {
           <p class="k-note">{busy || msg}</p>
         </div>
       )}
-      <section class="k-section">
-        <h2>Стопка карт</h2>
-        <p class="k-muted">Вторая карта поверх основной, с прозрачностью.</p>
-        <div class="k-row">
-          <select
-            class="k-field m-select"
-            value={st.stack?.basemap ?? ''}
-            onChange={(e) => {
-              const v = e.currentTarget.value;
-              setLayers({ stack: v ? { basemap: v, opacity: st.stack?.opacity ?? 0.5 } : null });
-            }}
-          >
-            <option value="">Нет</option>
-            {BASEMAPS.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-          {st.stack && (
-            <input
-              class="m-range"
-              type="range"
-              min={0.1}
-              max={1}
-              step={0.05}
-              value={st.stack.opacity}
-              onChange={(e) =>
-                st.stack && setLayers({ stack: { ...st.stack, opacity: Number(e.currentTarget.value) } })
-              }
-            />
-          )}
-        </div>
-      </section>
-      <section class="k-section">
-        <h2>Наложения</h2>
-        <p class="k-muted">
-          KML и GeoJSON — точки, линии, полигоны. Изображение (скан карты, схема) ставится по углам.
-        </p>
-        <div class="k-row">
-          <Button onClick={addVector}>Добавить KML / GeoJSON…</Button>
-          <Button onClick={addImage}>Добавить изображение…</Button>
-        </div>
-        {st.overlays.map(overlayRow)}
-      </section>
-      <section class="k-section">
-        <h2>Свои файлы карт (.mbtiles)</h2>
-        <p class="k-muted">Файл копируется в память устройства и работает без сети. Нужна растровая карта.</p>
-        <Button disabled={Boolean(busy)} onClick={addMbtiles}>
-          Открыть файл .mbtiles…
-        </Button>
-        {st.local.map((m) => (
-          <div key={m.id} class="m-area">
-            <div class="k-row">
-              <b>{m.name}</b>
-              <span class="k-muted">
-                {m.tiles.toLocaleString('ru-RU')} тайлов · уровни {m.minZoom}–{m.maxZoom} ·{' '}
-                {(m.bytes / 1048576).toFixed(1)} МБ
-              </span>
-            </div>
-            <div class="k-row">
-              <Button variant={basemap === m.id ? 'primary' : 'default'} onClick={() => onBasemap(m.id)}>
-                {basemap === m.id ? 'Выбрана' : 'Выбрать'}
-              </Button>
-              <Button disabled={Boolean(busy)} onClick={() => void removeLocal(m.id, m.name)}>
-                Удалить
-              </Button>
-            </div>
+      {featureOn('CORE-05') && (
+        <section class="k-section">
+          <h2>Стопка карт</h2>
+          <p class="k-muted">Вторая карта поверх основной, с прозрачностью.</p>
+          <div class="k-row">
+            <select
+              class="k-field m-select"
+              value={st.stack?.basemap ?? ''}
+              onChange={(e) => {
+                const v = e.currentTarget.value;
+                setLayers({ stack: v ? { basemap: v, opacity: st.stack?.opacity ?? 0.5 } : null });
+              }}
+            >
+              <option value="">Нет</option>
+              {BASEMAPS.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            {st.stack && (
+              <input
+                class="m-range"
+                type="range"
+                min={0.1}
+                max={1}
+                step={0.05}
+                value={st.stack.opacity}
+                onChange={(e) =>
+                  st.stack && setLayers({ stack: { ...st.stack, opacity: Number(e.currentTarget.value) } })
+                }
+              />
+            )}
           </div>
-        ))}
-      </section>
+        </section>
+      )}
+      {featureOn('CORE-05') && (
+        <section class="k-section">
+          <h2>Наложения</h2>
+          <p class="k-muted">
+            KML и GeoJSON — точки, линии, полигоны. Изображение (скан карты, схема) ставится по углам.
+          </p>
+          <div class="k-row">
+            <Button onClick={addVector}>Добавить KML / GeoJSON…</Button>
+            <Button onClick={addImage}>Добавить изображение…</Button>
+          </div>
+          {st.overlays.map(overlayRow)}
+        </section>
+      )}
+      {featureOn('CORE-04') && (
+        <section class="k-section">
+          <h2>Свои файлы карт (.mbtiles)</h2>
+          <p class="k-muted">
+            Файл копируется в память устройства и работает без сети. Нужна растровая карта.
+          </p>
+          <Button disabled={Boolean(busy)} onClick={addMbtiles}>
+            Открыть файл .mbtiles…
+          </Button>
+          {st.local.map((m) => (
+            <div key={m.id} class="m-area">
+              <div class="k-row">
+                <b>{m.name}</b>
+                <span class="k-muted">
+                  {m.tiles.toLocaleString('ru-RU')} тайлов · уровни {m.minZoom}–{m.maxZoom} ·{' '}
+                  {(m.bytes / 1048576).toFixed(1)} МБ
+                </span>
+              </div>
+              <div class="k-row">
+                <Button variant={basemap === m.id ? 'primary' : 'default'} onClick={() => onBasemap(m.id)}>
+                  {basemap === m.id ? 'Выбрана' : 'Выбрать'}
+                </Button>
+                <Button disabled={Boolean(busy)} onClick={() => void removeLocal(m.id, m.name)}>
+                  Удалить
+                </Button>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toMgrs, utmZone } from './mgrs';
+import { fromMgrs, toMgrs, utmZone } from './mgrs';
 
 /** Эталоны — библиотека mgrs 2.x (proj4js). */
 const REF: ReadonlyArray<readonly [number, number, string]> = [
@@ -24,5 +24,19 @@ describe('МГРС', () => {
     expect(utmZone(78, 5)).toBe(31);
     expect(utmZone(78, 25)).toBe(35);
     expect(utmZone(78, 40)).toBe(37);
+  });
+});
+
+describe('МГРС → WGS-84', () => {
+  it.each(REF)('туда-обратно %f, %f', (lat, lon, mgrs) => {
+    const r = fromMgrs(mgrs.replace(/ /g, ''));
+    expect(r).not.toBeNull();
+    const [la, lo] = r as readonly [number, number];
+    expect(Math.abs(la - lat)).toBeLessThan(2e-5);
+    expect(Math.abs(lo - lon)).toBeLessThan(2e-5);
+  });
+  it('не МГРС', () => {
+    expect(fromMgrs('7000')).toBeNull();
+    expect(fromMgrs('37U DB 123 4567')).toBeNull();
   });
 });

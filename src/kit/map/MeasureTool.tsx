@@ -12,6 +12,42 @@ import {
   type LonLat,
 } from '@core/geo/measure';
 import { Button } from '@kit/ui/Button';
+import { analyzeProfile, samplePath, type ProfileStats } from '@core/geo/profile';
+import { featureOn } from '@kit/feature/profiles';
+import { elevation } from '@platform/tiles/elevation';
+import { tiles } from './engine';
+
+interface Profile {
+  readonly d: number[];
+  readonly h: number[];
+  readonly st: ProfileStats;
+}
+
+/** График профиля: рельеф и луч видимости с первой точки на последнюю. */
+function ProfileChart({ p }: { readonly p: Profile }) {
+  const W = 320;
+  const H = 90;
+  const D = p.d[p.d.length - 1] || 1;
+  const lo = p.st.min - 5;
+  const hi = p.st.max + 5;
+  const X = (d: number) => (d / D) * W;
+  const Y = (h: number) => H - ((h - lo) / (hi - lo || 1)) * H;
+  const terrain = p.d.map((d, i) => `${X(d).toFixed(1)},${Y(p.h[i] ?? lo).toFixed(1)}`).join(' ');
+  return (
+    <svg class="m-prof" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <polygon points={`0,${H} ${terrain} ${W},${H}`} fill="rgba(120,90,40,0.35)" />
+      <polyline points={terrain} fill="none" stroke="#c98a2b" stroke-width="1.5" />
+      <line
+        x1={0}
+        y1={Y((p.h[0] ?? 0) + 2)}
+        x2={W}
+        y2={Y(p.h[p.h.length - 1] ?? 0)}
+        stroke={p.st.visible ? '#2ecc71' : '#ff3b30'}
+        stroke-dasharray="4 3"
+      />
+    </svg>
+  );
+}
 
 const COLOR = '#ffd400';
 
@@ -25,6 +61,7 @@ export function MeasureTool({
 }) {
   const [pts, setPts] = useState<LonLat[]>([]);
   const [area, setArea] = useState(false);
+  const [profile, setProfile] = useState<Profile | 'busy' | null>(null);
 
   useEffect(() => {
     map.addSource('measure', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -95,6 +132,19 @@ export function MeasureTool({
   const seg = a && b ? inverse(a, b) : null;
   const grid = a && b ? gridAngle(a, b) : 0;
   const total = pathLength(closed ? [...pts, pts[0] as LonLat] : pts);
+  useEffect(() => setProfile(null), [pts, area]);
+  const buildProfile = async () => {
+    setProfile('busy');
+    const s = samplePath(pts, 120);
+    const h: number[] = [];
+    for (const p of s.pts) h.push((await elevation(tiles, p[1], p[0])) ?? Number.NaN);
+    if (h.some((v) => !Number.isFinite(v))) {
+      setProfile(null);
+      alert('Нет данных высот для части пути: нужна сеть или скачанные высоты.');
+      return;
+    }
+    setProfile({ d: s.dist, h, st: analyzeProfile(s.dist, h) });
+  };
   const addCenter = () => {
     const c = map.getCenter();
     setPts((p) => [...p, [c.lng, c.lat]]);
@@ -133,6 +183,24 @@ export function MeasureTool({
           )}
         </div>
       )}
+      {profile === 'busy' && <p class="k-muted">Строю профиль…</p>}
+      {profile && profile !== 'busy' && (
+        <>
+          <ProfileChart p={profile} />
+          <div class="m-tool-v">
+            <div>
+              Высоты: {Math.round(profile.st.min)}–{Math.round(profile.st.max)} м · подъём{' '}
+              {Math.round(profile.st.ascent)} м · спуск {Math.round(profile.st.descent)} м
+            </div>
+            <div>
+              Видимость с первой точки на последнюю (наблюдатель 2 м):{' '}
+              <b>
+                {profile.st.visible ? 'есть' : `нет, закрыто на ${formatDistance(profile.st.blockedAt ?? 0)}`}
+              </b>
+            </div>
+          </div>
+        </>
+      )}
       <div class="k-row">
         <Button onClick={addCenter}>+ в перекрестии</Button>
         <Button disabled={!pts.length} onClick={() => setPts((p) => p.slice(0, -1))}>
@@ -141,6 +209,11 @@ export function MeasureTool({
         <Button variant={area ? 'primary' : 'default'} onClick={() => setArea((v) => !v)}>
           Площадь
         </Button>
+        {featureOn('CORE-12') && !closed && (
+          <Button disabled={pts.length < 2 || profile === 'busy'} onClick={() => void buildProfile()}>
+            Профиль
+          </Button>
+        )}
         <Button disabled={!pts.length} onClick={() => setPts([])}>
           Очистить
         </Button>
