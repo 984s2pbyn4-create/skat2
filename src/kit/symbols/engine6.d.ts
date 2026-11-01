@@ -41,4 +41,10 @@ export function drawSym(
   sc?: number,
   o?: unknown,
 ): void;
-export function decorLine(g: CanvasRenderingContext2D, P: Pt[], c: string, k: number, sp: LineSpec): void;
+export function decorLine(
+  g: CanvasRenderingContext2D,
+  P: Pt[],
+  c: string,
+  k: number,
+  sp: LineSpec & { flip?: boolean; flipA?: boolean; flipB?: boolean },
+): void;

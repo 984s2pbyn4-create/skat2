@@ -9,6 +9,7 @@ const objs: MapObject[] = [
     ...base,
     id: 'b',
     sym: 'z_rub_obor',
+    flipB: true,
     kind: 'line',
     coords: [
       [37.6, 49.3],
@@ -47,6 +48,8 @@ describe('пакет обмена', () => {
     expect(back[0]?.label).toBe('12101');
     expect(back[0]?.mirror).toBe(true);
     expect(back[1]?.mirror).toBe(false);
+    expect(back[1]?.flipB).toBe(true);
+    expect(back[1]?.flipA).toBe(false);
   });
   it('чужой файл — понятная ошибка', () => {
     expect(() => parsePacket({ v: 2 })).toThrow('пакетом обмена');

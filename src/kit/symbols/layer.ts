@@ -125,6 +125,7 @@ export function attachObjects(
     area: boolean,
     k: number,
     halo: boolean,
+    flips: { flip?: boolean; flipA?: boolean; flipB?: boolean } = {},
   ) => {
     const s = symbolById(sym);
     if (!s || cs.length < 2) return;
@@ -140,7 +141,27 @@ export function attachObjects(
       g.stroke();
       g.restore();
     }
-    decorLine(g, P, colorOf(sym, side), k, specOf(s));
+    decorLine(g, P, colorOf(sym, side), k, { ...specOf(s), ...flips });
+    if (halo && !area) {
+      // Начало и конец выбранной линии — чтобы понятно было, какой узел отражать.
+      g.save();
+      g.font = '600 11px sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      const ends: Array<[{ x: number; y: number }, string]> = [
+        [P[0] as { x: number; y: number }, 'Н'],
+        [P[P.length - 1] as { x: number; y: number }, 'К'],
+      ];
+      for (const [q, t] of ends) {
+        g.fillStyle = '#ffd400';
+        g.beginPath();
+        g.arc(q.x, q.y - 16, 8, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = '#000';
+        g.fillText(t, q.x, q.y - 16);
+      }
+      g.restore();
+    }
   };
 
   const draw = () => {
@@ -154,7 +175,12 @@ export function attachObjects(
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
     const k = scaleK(map.getZoom());
-    for (const o of lines) drawOne(o.sym, o.side, o.coords, o.kind === 'area', k * o.size, o.id === sel);
+    for (const o of lines)
+      drawOne(o.sym, o.side, o.coords, o.kind === 'area', k * o.size, o.id === sel, {
+        flip: o.mirror,
+        flipA: o.flipA,
+        flipB: o.flipB,
+      });
     if (draft) {
       drawOne(draft.sym, draft.side, draft.coords, draft.area, k, false);
       g.fillStyle = '#ffd400';

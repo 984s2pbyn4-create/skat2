@@ -1,6 +1,8 @@
 // Отрисовка тактических знаков на canvas — перенесено из СКАТ 6.x без изменения логики
 // (точечные знаки и линейные/площадные по Приложению 3). Типы — engine6.d.ts.
-// Единственное изменение: при зеркальном отражении (o.mx) текст внутри знака не зеркалится.
+// Изменения: при зеркальном отражении (o.mx) текст внутри знака не зеркалится;
+// у линейных знаков sp.flip переносит зубцы и метки на другую сторону линии,
+// sp.flipA / sp.flipB — отдельно узел в начале и в конце (полудужья разгранлиний: включительно / исключительно).
 /* eslint-disable */
 import SYM_DEF from './symbols6.json';
 
@@ -92,8 +94,8 @@ function ldd(P){ return P.filter((q, i) => !i || Math.hypot(q.x - P[i-1].x, q.y 
 function lgeo(P){ const S = [0]; for (let i = 1; i < P.length; i++) S.push(S[i-1] + Math.hypot(P[i].x - P[i-1].x, P[i].y - P[i-1].y)); return S; }
 function lnAt(P, S, s){ const T = S[S.length-1]; s = Math.max(0, Math.min(T, s)); let i = 1; while (i < S.length - 1 && S[i] < s) i++;
 const a = P[i-1], b = P[i], L0 = (S[i] - S[i-1]) || 1, t = (s - S[i-1]) / L0, ux = (b.x - a.x) / L0, uy = (b.y - a.y) / L0;
-return {x:a.x + (b.x - a.x) * t, y:a.y + (b.y - a.y) * t, ux, uy, nx:-uy, ny:ux}; }
-function loff(P, o){ if (!o) return P; return P.map((q, i) => { const a = P[Math.max(0, i-1)], b = P[Math.min(P.length-1, i+1)], L0 = Math.hypot(b.x - a.x, b.y - a.y) || 1; return {x:q.x - (b.y - a.y) / L0 * o, y:q.y + (b.x - a.x) / L0 * o}; }); }
+return {x:a.x + (b.x - a.x) * t, y:a.y + (b.y - a.y) * t, ux, uy, nx:-uy * FLIP, ny:ux * FLIP}; }
+function loff(P, o){ if (!o) return P; o *= FLIP; return P.map((q, i) => { const a = P[Math.max(0, i-1)], b = P[Math.min(P.length-1, i+1)], L0 = Math.hypot(b.x - a.x, b.y - a.y) || 1; return {x:q.x - (b.y - a.y) / L0 * o, y:q.y + (b.x - a.x) / L0 * o}; }); }
 function lpath(g, P, c, w, dash){ if (P.length < 2) return; g.strokeStyle = c; g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round'; g.setLineDash(dash || []); g.beginPath(); P.forEach((q, i) => i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y)); g.stroke(); g.setLineDash([]); }
 function lseg(g, L, c, w){ g.strokeStyle = c; g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round'; g.setLineDash([]); g.beginPath(); L.forEach(s => s.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.stroke(); }
 function lfill(g, pts, c){ g.fillStyle = c; g.beginPath(); pts.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.closePath(); g.fill(); }
@@ -159,9 +161,12 @@ pos.forEach((s, i) => { const p = lnAt(P, S, s); if (m.off){ p.x += p.nx * m.off
 if (sp.mid) lmark(g, sp.mid.t, lnAt(P, S, T / 2), c, k, sp.mid, 0);
 if (!sp.area && sp.ends){ const E = Array.isArray(sp.ends) ? {a:sp.ends, b:sp.ends} : sp.ends;
 const pa = lnAt(P, S, 0), pb = lnAt(P, S, T);
-(E.a || []).forEach(t => lend(g, {x:pa.x, y:pa.y, ox:-pa.ux, oy:-pa.uy, nx:pa.nx, ny:pa.ny}, t, c, k, side, P, S, true));
-(E.b || []).forEach(t => lend(g, {x:pb.x, y:pb.y, ox:pb.ux, oy:pb.uy, nx:pb.nx, ny:pb.ny}, t, c, k, side, P, S, false)); } }
-function decorLine(g, P, c, k, sp){ P = ldd(P); if (P.length < 2) return; g.save();
+const fa = sp.flipA ? -1 : 1, fb = sp.flipB ? -1 : 1;
+(E.a || []).forEach(t => lend(g, {x:pa.x, y:pa.y, ox:-pa.ux, oy:-pa.uy, nx:pa.nx * fa, ny:pa.ny * fa}, t, c, k, side * fa, P, S, true));
+(E.b || []).forEach(t => lend(g, {x:pb.x, y:pb.y, ox:pb.ux, oy:pb.uy, nx:pb.nx * fb, ny:pb.ny * fb}, t, c, k, side * fb, P, S, false)); } }
+let FLIP = 1;
+function decorLine(g, P, c, k, sp){ FLIP = sp.flip ? -1 : 1; try { decorLine0(g, P, c, k, sp); } finally { FLIP = 1; } }
+function decorLine0(g, P, c, k, sp){ P = ldd(P); if (P.length < 2) return; g.save();
 if (sp.area && P.length > 3){ let A = 0; for (let i = 1; i < P.length; i++) A += P[i-1].x * P[i].y - P[i].x * P[i-1].y; if (sp.out && A > 0) P = P.slice().reverse();
 if (sp.fill){ g.save(); g.beginPath(); P.forEach((q, i) => i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y)); g.closePath();
 if (sp.fill === 'y'){ g.fillStyle = SCOL.y; g.fill(); } else { g.clip(); let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; P.forEach(q => { x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); });

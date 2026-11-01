@@ -1,7 +1,7 @@
 import type maplibregl from 'maplibre-gl';
 import type { MapObject } from '@core/model/objects';
 import { Button } from '@kit/ui/Button';
-import { symbolById } from './catalog';
+import { specOf, symbolById } from './catalog';
 import { objects, selected } from './store';
 
 /** Карточка выбранного объекта: сторона, подпись, поворот, размер, перенос, удаление. */
@@ -64,6 +64,38 @@ export function ObjectCard({ obj, map }: { readonly obj: MapObject; readonly map
         />
       </div>
       {point && <p class="k-muted">Выбранный знак можно перетащить по карте.</p>}
+      {!point && (
+        <div class="k-row">
+          <Button
+            variant={obj.mirror ? 'primary' : 'default'}
+            onClick={() => objects.update(obj.id, { mirror: !obj.mirror })}
+          >
+            Отразить зубцы и метки
+          </Button>
+          {obj.kind === 'line' && s && specOf(s).ends !== undefined && (
+            <>
+              <Button
+                variant={obj.flipA ? 'primary' : 'default'}
+                onClick={() => objects.update(obj.id, { flipA: !obj.flipA })}
+              >
+                Узел «Н»
+              </Button>
+              <Button
+                variant={obj.flipB ? 'primary' : 'default'}
+                onClick={() => objects.update(obj.id, { flipB: !obj.flipB })}
+              >
+                Узел «К»
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+      {obj.kind === 'line' && s && specOf(s).ends !== undefined && (
+        <p class="k-muted">
+          «Н» и «К» — начало и конец линии. Узел отражается на другую сторону: у разгранлиний это включительно
+          или исключительно.
+        </p>
+      )}
       <div class="k-row">
         {point && (
           <Button

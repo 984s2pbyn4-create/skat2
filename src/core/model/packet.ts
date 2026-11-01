@@ -45,6 +45,8 @@ export function objectsToPacket(
       size: o.size,
       note: o.note,
       mirror: Boolean(o.mirror),
+      flipA: Boolean(o.flipA),
+      flipB: Boolean(o.flipB),
     },
   }));
   return { v: 1, id, from, title, layers: [{ name: 'Обстановка', features }] };
@@ -67,6 +69,8 @@ export function packetToObjects(p: LayerPacket, newId: () => string): MapObject[
         label: typeof pr.label === 'string' ? pr.label : '',
         note: typeof pr.note === 'string' ? pr.note : '',
         mirror: pr.mirror === true,
+        flipA: pr.flipA === true,
+        flipB: pr.flipB === true,
       };
       const pair = (c: number[]): [number, number] => [c[0] ?? 0, c[1] ?? 0];
       if (g?.type === 'Point') out.push({ ...base, kind: 'point', coords: [pair(g.coordinates)] });

@@ -18,6 +18,9 @@ const ObjSchema = z.object({
   note: z.string(),
   /** Зеркальное отражение точечного знака (текст внутри знака не отражается). */
   mirror: z.optional(z.boolean()),
+  /** Линейный знак: отразить узел в начале / в конце (полудужья разгранлиний). */
+  flipA: z.optional(z.boolean()),
+  flipB: z.optional(z.boolean()),
 });
 export type MapObject = z.infer<typeof ObjSchema>;
 
